@@ -31,6 +31,6 @@ Invisibly returns NULL.
 }
 \description{
 Ensures Miniconda is installed, provisions the requested Python
-version into it, creates a virtualenv with that interpreter, activates it,
-and removes the temporary conda env.
+version into it if necessary, creates a virtualenv with that interpreter,
+and activates it.
 }

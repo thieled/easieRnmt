@@ -13,3 +13,5 @@ BugReports: https://github.com/thieled/easieRnmt/issues
 Imports: 
     cli,
     reticulate
+Suggests: 
+    httr
