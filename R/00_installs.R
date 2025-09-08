@@ -1,8 +1,8 @@
 #' @title Install and Set Up a Virtual Environment
 #'
 #' @description Ensures Miniconda is installed, provisions the requested Python
-#' version into it, creates a virtualenv with that interpreter, activates it,
-#' and removes the temporary conda env.
+#' version into it if necessary, creates a virtualenv with that interpreter,
+#' and activates it.
 #'
 #' @param python_version Character. Python version for the virtualenv. Default "3.11".
 #' @param venv_name Character. Virtualenv name. Default "r-easynmt".
@@ -55,53 +55,54 @@ install_conda_venv <- function(python_version = "3.11",
 
   # Step 2: Define conda binary from chosen installation
   if (!is.null(conda_path)) {
-    # use user-specified path
     conda_bin <- if (Sys.info()[["sysname"]] == "Windows") {
       normalizePath(file.path(conda_path, "Scripts", "conda.exe"))
     } else {
       normalizePath(file.path(conda_path, "bin", "conda"))
     }
   } else {
-    # autodetect: find base environment from conda_list()
     t <- reticulate::conda_list()
     base_python <- t$python[t$name %in% c("base", "root")][1]
     if (is.na(base_python)) {
       stop("Could not detect base conda environment.")
     }
-
     if (Sys.info()[["sysname"]] == "Windows") {
-      # Windows base env: .../miniconda/python.exe
       if (grepl("envs", base_python, ignore.case = TRUE)) {
-        # .../miniconda/envs/<env>/python.exe
         conda_root <- dirname(dirname(dirname(base_python)))
       } else {
-        # .../miniconda/python.exe
         conda_root <- dirname(base_python)
       }
       conda_bin <- normalizePath(file.path(conda_root, "Scripts", "conda.exe"))
     } else {
-      # Unix/macOS base env: .../miniconda3/bin/python
       if (grepl("envs", base_python)) {
-        # .../miniconda3/envs/<env>/bin/python
         conda_root <- dirname(dirname(dirname(base_python)))
       } else {
-        # .../miniconda3/bin/python
         conda_root <- dirname(dirname(base_python))
       }
       conda_bin <- normalizePath(file.path(conda_root, "bin", "conda"))
     }
   }
 
+  # Step 3: Decide which Python to use
+  base_python <- t$python[t$name %in% c("base", "root")][1]
+  base_version <- tryCatch(
+    system2(base_python, "--version", stdout = TRUE, stderr = TRUE),
+    error = function(e) NA
+  )
+  use_env <- NULL
 
-  # Step 3: Ensure requested Python version via tmp env
-  tmp_env <- paste0("tmp-", gsub("\\.", "", python_version))
-  if (!tmp_env %in% t$name) {
-    vmessage("Creating temporary conda env with Python ", python_version,
-             " using ", conda_bin)
-    system2(conda_bin, c("create", "-y", "-n", tmp_env, paste0("python=", python_version)))
-    t <- reticulate::conda_list(conda = conda_bin)
+  if (!is.na(base_version) && grepl(python_version, base_version)) {
+    vmessage("Base conda already provides Python ", python_version)
+    py_bin <- base_python
+  } else {
+    use_env <- paste0("py-", gsub("\\.", "", python_version))
+    if (!use_env %in% t$name) {
+      vmessage("Creating conda env ", use_env, " with Python ", python_version)
+      system2(conda_bin, c("create", "-y", "-n", use_env, paste0("python=", python_version)))
+      t <- reticulate::conda_list(conda = conda_bin)
+    }
+    py_bin <- t$python[t$name == use_env]
   }
-  py_bin <- t$python[t$name == tmp_env]
 
   # Step 4: Create the venv with that binary
   env_exists <- reticulate::virtualenv_exists(envname = venv_name)
