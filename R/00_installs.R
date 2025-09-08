@@ -234,3 +234,104 @@ install_torch <- function(venv_name = "r-easynmt",
 
 
 
+#' Install FastText in a Python virtual environment
+#'
+#' This function installs the FastText library inside a conda virtual
+#' environment managed through \code{reticulate}. On Windows, a precompiled
+#' wheel is downloaded, unpacked, and installed. On Linux and macOS, the
+#' library is installed directly from PyPI. If installation fails (for example
+#' due to unsupported Python versions), the function does not stop but issues
+#' a warning instead.
+#'
+#' @param wheel_url Character string. URL to the zipped FastText wheel for
+#'   Windows. Defaults to the official release of version 0.9.2 for Python 3.11
+#'   and 64-bit Windows.
+#' @param python_version Character string. Python version to use when creating
+#'   the conda environment via \code{easieRnmt::install_conda_venv}. Default is
+#'   \code{"3.11"}.
+#' @param venv_name Character string. Name of the conda virtual environment.
+#'   Default is \code{"r-easynmt"}.
+#' @param verbose Logical. If \code{TRUE}, print progress messages during
+#'   installation. Default is \code{TRUE}.
+#' @param conda_path Optional character string. Path to a conda installation.
+#'   If \code{NULL}, the default conda installation is used.
+#' @param force Logical. If \code{TRUE}, uninstall any existing installations of
+#'   \code{fasttext} or \code{fasttext-wheel} before reinstalling. Default is
+#'   \code{FALSE}.
+#'
+#' @return Invisibly returns \code{TRUE} if the function completes. If
+#'   installation fails, warnings are raised but the process continues.
+#'
+#' @details
+#' On Windows, FastText is not officially supported and compilation from
+#' source often fails. This function therefore installs a precompiled wheel
+#' distributed as a zipped file. On Linux and macOS, the package is installed
+#' directly from PyPI with \code{pip install fasttext}.
+#'
+#' @export
+install_fasttext <- function(
+    wheel_url = "https://github.com/facebookresearch/fastText/files/14355061/fasttext-0.9.2-cp311-cp311-win_amd64.whl.zip",
+    python_version = "3.11",
+    venv_name = "r-easynmt",
+    verbose = TRUE,
+    conda_path = NULL,
+    force = FALSE
+) {
+  if (!requireNamespace("reticulate", quietly = TRUE)) {
+    stop("Please install reticulate first.")
+  }
+
+  # ensure venv exists / is activated
+  easieRnmt::install_conda_venv(
+    force = FALSE,
+    python_version = python_version,
+    venv_name = venv_name,
+    verbose = verbose,
+    conda_path = conda_path
+  )
+  py_bin <- reticulate::py_exe()
+
+  # cleanup if requested
+  if (force) {
+    tryCatch({
+      system(sprintf('"%s" -m pip uninstall -y fasttext fasttext-wheel', py_bin))
+    }, error = function(e) {
+      warning("Uninstall step failed: ", conditionMessage(e))
+    })
+  }
+
+  os <- tolower(Sys.info()[["sysname"]])
+
+  if (os == "windows") {
+    # --- Windows: use precompiled wheel ---
+    tmp_zip <- tempfile(fileext = ".zip")
+    tmp_dir <- tempfile()
+    dir.create(tmp_dir, recursive = TRUE)
+
+    tryCatch({
+      utils::download.file(wheel_url, tmp_zip, mode = "wb", quiet = !verbose)
+      utils::unzip(tmp_zip, exdir = tmp_dir)
+      wheel_file <- list.files(tmp_dir, pattern = "\\.whl$", full.names = TRUE)
+      if (length(wheel_file) == 0) stop("No .whl file found in zip")
+      cmd <- sprintf('"%s" -m pip install "%s"', py_bin, wheel_file)
+      if (verbose) message("Running: ", cmd)
+      system(cmd)
+    }, error = function(e) {
+      warning("FastText installation from wheel failed: ", conditionMessage(e))
+    })
+
+  } else {
+    # --- Linux / macOS: install from PyPI ---
+    tryCatch({
+      cmd <- sprintf('"%s" -m pip install fasttext', py_bin)
+      if (verbose) message("Running: ", cmd)
+      system(cmd)
+    }, error = function(e) {
+      warning("FastText installation via pip failed: ", conditionMessage(e))
+    })
+  }
+
+  invisible(TRUE)
+}
+
+
