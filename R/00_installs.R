@@ -54,15 +54,44 @@ install_conda_venv <- function(python_version = "3.11",
   }
 
   # Step 2: Define conda binary from chosen installation
-  conda_bin <- if (!is.null(conda_path)) {
-    if (Sys.info()[["sysname"]] == "Windows") {
+  if (!is.null(conda_path)) {
+    # use user-specified path
+    conda_bin <- if (Sys.info()[["sysname"]] == "Windows") {
       normalizePath(file.path(conda_path, "Scripts", "conda.exe"))
     } else {
       normalizePath(file.path(conda_path, "bin", "conda"))
     }
   } else {
-    "conda"
+    # autodetect: find base environment from conda_list()
+    t <- reticulate::conda_list()
+    base_python <- t$python[t$name %in% c("base", "root")][1]
+    if (is.na(base_python)) {
+      stop("Could not detect base conda environment.")
+    }
+
+    if (Sys.info()[["sysname"]] == "Windows") {
+      # Windows base env: .../miniconda/python.exe
+      if (grepl("envs", base_python, ignore.case = TRUE)) {
+        # .../miniconda/envs/<env>/python.exe
+        conda_root <- dirname(dirname(dirname(base_python)))
+      } else {
+        # .../miniconda/python.exe
+        conda_root <- dirname(base_python)
+      }
+      conda_bin <- normalizePath(file.path(conda_root, "Scripts", "conda.exe"))
+    } else {
+      # Unix/macOS base env: .../miniconda3/bin/python
+      if (grepl("envs", base_python)) {
+        # .../miniconda3/envs/<env>/bin/python
+        conda_root <- dirname(dirname(dirname(base_python)))
+      } else {
+        # .../miniconda3/bin/python
+        conda_root <- dirname(dirname(base_python))
+      }
+      conda_bin <- normalizePath(file.path(conda_root, "bin", "conda"))
+    }
   }
+
 
   # Step 3: Ensure requested Python version via tmp env
   tmp_env <- paste0("tmp-", gsub("\\.", "", python_version))
