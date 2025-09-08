@@ -270,7 +270,10 @@ install_torch <- function(venv_name = "r-easynmt",
 #'
 #' @export
 install_fasttext <- function(
-    wheel_url = "https://github.com/facebookresearch/fastText/files/14355061/fasttext-0.9.2-cp311-cp311-win_amd64.whl.zip",
+    wheel_url = paste0(
+      "https://github.com/facebookresearch/fastText/files/",
+      "14355061/fasttext-0.9.2-cp311-cp311-win_amd64.whl.zip"
+    ),
     python_version = "3.11",
     venv_name = "r-easynmt",
     verbose = TRUE,
@@ -334,4 +337,262 @@ install_fasttext <- function(
   invisible(TRUE)
 }
 
+
+
+#' Install EasyNMT in a Python virtual environment
+#'
+#' This function installs the EasyNMT library and its dependencies in a conda
+#' virtual environment managed through \code{reticulate}. It creates or
+#' activates the specified environment, installs PyTorch (with CUDA if
+#' available, otherwise CPU), installs FastText (using a precompiled wheel on
+#' Windows), and finally installs EasyNMT with all required dependencies.
+#'
+#' Installation proceeds in several steps:
+#' \enumerate{
+#'   \item The conda environment is created or activated with
+#'     \code{install_conda_venv}. Miniconda is installed if no conda is found.
+#'   \item PyTorch is installed with automatic CUDA/CPU support via
+#'     \code{install_torch}.
+#'   \item FastText is installed with \code{install_fasttext}. On
+#'     Windows, this uses a precompiled wheel and only works for Python
+#'     versions up to 3.11.
+#'   \item The function checks if FastText can be imported. If successful,
+#'     EasyNMT and all dependencies are installed in one step. If not,
+#'     EasyNMT is installed without dependencies and the required packages
+#'     (except fasttext) are installed manually.
+#' }
+#'
+#' @param python_version Character string. Python version to use when creating
+#'   the conda environment. Default is \code{"3.11"}.
+#' @param venv_name Character string. Name of the conda virtual environment to
+#'   create or activate. Default is \code{"r-easynmt"}.
+#' @param ask Logical. If \code{TRUE}, ask before installing Miniconda. Default
+#'   is \code{TRUE}.
+#' @param force Logical. If \code{TRUE}, force reinstallation of the conda
+#'   environment and Python packages. Default is \code{TRUE}.
+#' @param verbose Logical. If \code{TRUE}, print progress messages during
+#'   installation. Default is \code{TRUE}.
+#' @param conda_path Optional character string. Path to a conda installation. If
+#'   \code{NULL}, the default conda installation is used.
+#'
+#' @return Invisibly returns \code{TRUE} if the installation process completes.
+#'   If FastText cannot be installed or imported, the function will still
+#'   attempt to install EasyNMT without FastText and issue a warning.
+#'
+#' @details
+#' On Windows, FastText is not officially supported and compilation from source
+#' often fails. The helper function \code{install_fasttext} installs
+#' a precompiled wheel, which only works for Python versions up to 3.11. On
+#' Linux and macOS, FastText can be installed directly from PyPI.
+#'
+#' The function installs the following dependencies if FastText is not
+#' available: \code{nltk}, \code{numpy}, \code{protobuf}, \code{sentencepiece},
+#' \code{torch}, \code{tqdm}, \code{transformers}, \code{langdetect},
+#' \code{sacremoses}.
+#'
+#' @export
+install_easynmt <- function(
+    python_version = "3.11",
+    venv_name = "r-easynmt",
+    ask = TRUE,
+    force = T,
+    verbose = TRUE,
+    conda_path = NULL
+) {
+  if (!requireNamespace("reticulate", quietly = TRUE)) {
+    stop("Please install reticulate first.")
+  }
+
+  # Install or activate venv. Installs miniconda if not present.
+  install_conda_venv(
+    python_version = python_version,
+    venv_name = venv_name,
+    ask = ask,
+    force = force,
+    verbose = verbose,
+    conda_path = conda_path)
+
+  # Install pytorch, with automatic CUDA or CPU support.
+  install_torch()
+
+  # Install fasttext, building from prebuilt wheel for windows. Only works in Py <= 3.11
+  install_fasttext(force = T)
+
+  # Check success of fasttext installation
+  py_bin <- reticulate::py_exe()
+
+  # check if fasttext can be imported and used
+  check_code <- "
+try:
+    import fasttext
+    ok = hasattr(fasttext, 'train_unsupervised')
+    print('OK' if ok else 'FAIL')
+except Exception:
+    print('FAIL')
+"
+  tmpfile <- tempfile(fileext = ".py")
+  writeLines(check_code, tmpfile)
+  result <- system(sprintf('"%s" "%s"', py_bin, tmpfile), intern = TRUE)
+  unlink(tmpfile)
+
+  fasttext_ok <- any(grepl("^OK$", result))
+
+  if (fasttext_ok) {
+    message("fasttext detected. Installing easynmt with dependencies...")
+    cmd <- sprintf(
+      '"%s" -m pip install easynmt nltk numpy protobuf sentencepiece torch tqdm transformers langdetect sacremoses',
+      py_bin
+    )
+    system(cmd)
+  } else {
+    warning("fasttext not detected. Installing easynmt without fasttext and adding other dependencies...")
+    cmd1 <- sprintf('"%s" -m pip install easynmt --no-deps', py_bin)
+    cmd2 <- sprintf(
+      '"%s" -m pip install nltk numpy protobuf sentencepiece torch tqdm transformers langdetect sacremoses',
+      py_bin
+    )
+    system(cmd1)
+    system(cmd2)
+  }
+
+  # Set global option that easynmt is initialized
+  options("easynmt_initialized" = TRUE)
+
+  invisible(TRUE)
+}
+
+
+
+#' Initialize the r-easynmt Python environment
+#'
+#' This function initializes and verifies the Python environment used by
+#' \pkg{easieRnmt}. It builds on \code{\link{install_easynmt}} by activating
+#' the specified virtual environment, checking the Python configuration,
+#' and verifying that required Python packages are correctly installed.
+#'
+#' Specifically, the function:
+#' \itemize{
+#'   \item Ensures that the Python environment created by
+#'   \code{install_easynmt()} is active.
+#'   \item Prints the active environment, Python path, and Python version.
+#'   \item Verifies that PyTorch is installed and reports its version as
+#'   well as whether CUDA is available.
+#'   \item Checks whether \code{fasttext} and \code{EasyNMT} are installed
+#'   and reports their versions.
+#'   \item Sets a global option (\code{easynmt_initialized = TRUE}) so that
+#'   subsequent calls can skip redundant initialization.
+#' }
+#'
+#' @param python_version Character scalar. Python version to use for the
+#' environment. Default is \code{"3.11"}.
+#' @param venv_name Character scalar. Name of the virtual environment to
+#' create or activate. Default is \code{"r-easynmt"}.
+#' @param ask Logical. If \code{TRUE}, prompt the user before creating or
+#' overwriting an environment. Default is \code{TRUE}.
+#' @param force Logical. If \code{TRUE}, force reinstallation of the
+#' environment even if it already exists. Default is \code{FALSE}.
+#' @param verbose Logical. If \code{TRUE}, print informative messages about
+#' the environment configuration and installed packages. Default is
+#' \code{TRUE}.
+#' @param conda_path Optional character scalar. Path to the conda
+#' installation to use. If \code{NULL}, the default conda installation is
+#' used.
+#'
+#' @details
+#' This function is typically called once at the beginning of a session to
+#' prepare the Python backend for translation tasks. It assumes that
+#' \code{\link{install_easynmt}} has been run at least once to set up the
+#' required environment.
+#'
+#' Note that \code{fasttext} is optional. If it is not available, EasyNMT
+#' can still work with \code{langdetect} or \code{langid} for language
+#' detection, but automatic detection may be less accurate. In such cases,
+#' it is recommended to specify the source language explicitly when calling
+#' translation functions.
+#'
+#' @return This function is called for its side effects. It prints messages
+#' about the environment and package versions if \code{verbose = TRUE}, and
+#' sets the global option \code{easynmt_initialized = TRUE}.
+#'
+#' @export
+initialize_easynmt <- function(python_version = "3.11",
+                               venv_name = "r-easynmt",
+                               ask = TRUE,
+                               force = FALSE,
+                               verbose = TRUE,
+                               conda_path = NULL){
+
+  # Helper function for verbose messages
+  vmessage <- function(...) {
+    if (verbose) message(...)
+  }
+
+  if (!is.null(options("easynmt_initialized")$easynmt_initialized)){
+    vmessage("r-easynmt environment is already initialized.")
+  }else{
+    install_easynmt(python_version = python_version,
+                    venv_name = venv_name,
+                    ask = ask,
+                    force = force,
+                    verbose = verbose,
+                    conda_path = conda_path)
+  }
+
+  # Verify Python installation
+  cfg <- tryCatch(reticulate::py_config(), error = function(e) NULL)
+
+  venv <- basename(Sys.getenv("VIRTUAL_ENV", unset = Sys.getenv("CONDA_DEFAULT_ENV", unset = "none")))
+  python <- if (!is.null(cfg)) cfg$python else "not initialized"
+  version <- if (is.null(cfg) || all(is.na(cfg$version))) "unknown" else
+    if (is.character(cfg$version)) cfg$version else paste(cfg$version, collapse = ".")
+
+  vmessage("Active env: ", venv)
+  vmessage("Python: ", python)
+  vmessage("Python Version: ", version)
+
+  # Verify pytorch installation
+  tryCatch({
+    torch <- reticulate::import("torch")
+    vmessage("Torch version: ", torch$`__version__`)
+    vmessage("CUDA available: ", torch$cuda$is_available())
+  }, error = function(e) {
+    stop("Verification failed: Torch is not properly installed.")
+  })
+
+  # Verify fasttext and EasyNMT install
+  # Helper to safely get Python package version via importlib.metadata
+  get_py_version <- function(pkg) {
+    tryCatch(
+      {
+        v <- reticulate::py_run_string(
+          sprintf("import importlib.metadata as im; v = im.version('%s')", pkg)
+        )
+        reticulate::py_to_r(v$v)
+      },
+      error = function(e) NA_character_
+    )
+  }
+
+  # Get versions
+  easynmt_ver  <- get_py_version("easynmt")
+  fasttext_ver <- get_py_version("fasttext")
+
+  # Messages
+  if (!is.na(fasttext_ver)) {
+    vmessage("fasttext version: ", fasttext_ver)
+  } else {
+    vmessage("fasttext not found in active Python environment.")
+  }
+
+  if (!is.na(easynmt_ver)) {
+    vmessage("EasyNMT version: ", easynmt_ver)
+  } else {
+    vmessage("EasyNMT not found in active Python environment.")
+  }
+
+
+  # Set global option that easynmt is initialized
+  options("easynmt_initialized" = TRUE)
+
+}
 

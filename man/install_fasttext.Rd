@@ -5,8 +5,8 @@
 \title{Install FastText in a Python virtual environment}
 \usage{
 install_fasttext(
-  wheel_url =
-    "https://github.com/facebookresearch/fastText/files/14355061/fasttext-0.9.2-cp311-cp311-win_amd64.whl.zip",
+  wheel_url = paste0("https://github.com/facebookresearch/fastText/files/",
+    "14355061/fasttext-0.9.2-cp311-cp311-win_amd64.whl.zip"),
   python_version = "3.11",
   venv_name = "r-easynmt",
   verbose = TRUE,
