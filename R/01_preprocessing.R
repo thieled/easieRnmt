@@ -1,3 +1,50 @@
+#' @title Replace Emojis with Names
+#'
+#' @description Replaces all emojis in a character vector with their textual names (in :name: style).
+#'
+#' @param text_vec Character vector of texts.
+#'
+#' @return Character vector with emojis replaced by names.
+#' @export
+replace_emoji_with_name <- function(text_vec) {
+  if (!requireNamespace("emoji", quietly = TRUE)) {
+    stop("Package 'emoji' is required for this function. Please install it.")
+  }
+  if (!requireNamespace("stringi", quietly = TRUE)) {
+    stop("Package 'stringi' is required for this function. Please install it.")
+  }
+
+  emoji_vec <- emoji::emoji_name
+  emoji_vec <- emoji_vec[grepl("[[:alpha:]]", names(emoji_vec))]
+
+  # emoji → :name: mapping
+  replacement_map <- stats::setNames(paste0(" [:", names(emoji_vec), ":] "), unname(emoji_vec))
+  emoji_chars <- names(replacement_map)
+
+  # Filter emojis that actually occur in text_vec (to avoid massive unnecessary replace)
+  present_idx <- stringi::stri_detect_fixed(
+    rep(paste(text_vec, collapse = " "), length(emoji_chars)),
+    emoji_chars
+  )
+  emoji_chars <- emoji_chars[present_idx]
+  replacements <- unname(replacement_map[emoji_chars])
+
+  if (length(emoji_chars) == 0L) {
+    return(text_vec)
+  }
+
+  # Vectorized replacement: replace all present emojis in one sweep
+  text_vec <- stringi::stri_replace_all_fixed(
+    str = text_vec,
+    pattern = emoji_chars,
+    replacement = replacements,
+    vectorize_all = FALSE
+  )
+
+  text_vec
+}
+
+
 #' @title Clean and Normalize Text for Language Detection and Translation
 #'
 #' @description Cleans and normalizes raw text data in preparation for language
@@ -115,57 +162,6 @@ clean_text <- function(x,
 
 
 
-
-#' @title Replace Emojis with Names
-#'
-#' @description Replaces all emojis in a character vector with their textual names (in :name: style).
-#'
-#' @param text_vec Character vector of texts.
-#'
-#' @return Character vector with emojis replaced by names.
-#' @export
-replace_emoji_with_name <- function(text_vec) {
-  if (!requireNamespace("emoji", quietly = TRUE)) {
-    stop("Package 'emoji' is required for this function. Please install it.")
-  }
-  if (!requireNamespace("stringi", quietly = TRUE)) {
-    stop("Package 'stringi' is required for this function. Please install it.")
-  }
-
-  emoji_vec <- emoji::emoji_name
-  emoji_vec <- emoji_vec[grepl("[[:alpha:]]", names(emoji_vec))]
-
-  # emoji → :name: mapping
-  replacement_map <- stats::setNames(paste0(" [:", names(emoji_vec), ":] "), unname(emoji_vec))
-  emoji_chars <- names(replacement_map)
-
-  # Filter emojis that actually occur in text_vec (to avoid massive unnecessary replace)
-  present_idx <- stringi::stri_detect_fixed(
-    rep(paste(text_vec, collapse = " "), length(emoji_chars)),
-    emoji_chars
-  )
-  emoji_chars <- emoji_chars[present_idx]
-  replacements <- unname(replacement_map[emoji_chars])
-
-  if (length(emoji_chars) == 0L) {
-    return(text_vec)
-  }
-
-  # Vectorized replacement: replace all present emojis in one sweep
-  text_vec <- stringi::stri_replace_all_fixed(
-    str = text_vec,
-    pattern = emoji_chars,
-    replacement = replacements,
-    vectorize_all = FALSE
-  )
-
-  text_vec
-}
-
-
-
-
-
 #' @title Detect Languages with fastText
 #'
 #' @description Identifies the language of each text in a character vector or data.frame
@@ -190,6 +186,7 @@ replace_emoji_with_name <- function(text_vec) {
 #' Texts longer than this are truncated. Default = 5000.
 #' @param threads Integer, number of threads for fastText. Default = parallel::detectCores().
 #' @param verbose Logical, whether to print progress messages. Default = TRUE.
+#' @param ... Additional parameters passed on to \code{clean_text}.
 #'
 #' @return A data.table with standardized columns: \code{row_id}, optional \code{id},
 #' \code{text_orig}, \code{text_clean}, \code{lang_guess}.
@@ -204,7 +201,8 @@ detect_languages <- function(x,
                              und_label = "und",
                              max_char = 5000,
                              threads = parallel::detectCores(),
-                             verbose = TRUE) {
+                             verbose = TRUE,
+                             ...) {
   if (!requireNamespace("fastText", quietly = TRUE)) stop("Package 'fastText' must be installed.")
   vmessage <- function(...) if (verbose) message(...)
 
@@ -215,7 +213,8 @@ detect_languages <- function(x,
     id_col = id_col,
     lang_guess_col = lang_guess_col,
     max_char = max_char,
-    verbose = verbose
+    verbose = verbose,
+    ...
   )
 
   # Resolve fastText model path
@@ -280,3 +279,98 @@ detect_languages <- function(x,
 
   return(dt[])
 }
+
+
+
+#' @title Preprocess Text for Translation
+#'
+#' @description Wrapper around \code{detect_languages()} that detects languages,
+#' reprocesses low-confidence cases, and splits the data into homogeneous
+#' language groups for translation.
+#'
+#' @param x Character vector or data.frame containing texts to process.
+#' @param text_col Character, name of the text column if \code{x} is a data.frame.
+#' Ignored if \code{x} is a character vector. Default = "text".
+#' @param id_col Character, optional column name in the input data.frame to
+#' preserve as an identifier. Default = NULL.
+#' @param lang_guess_col Character, optional column name in the input data.frame
+#' to preserve as a column named \code{lang_guess}. Default = NULL.
+#' @param targ_lang Character, fallback language code to assign when fastText
+#' detection is uncertain and no \code{lang_guess} is available. Required.
+#' @param model_path Character, path to the fastText \code{lid.176.bin} model.
+#' Defaults to \code{~/.cache/easieRnmt/lid.176.bin}.
+#' @param prob_threshold Numeric, threshold below which the detected language is
+#' replaced by \code{und_label}. Default = 0.25.
+#' @param und_label Character, label for undefined language. Default = "und".
+#' @param max_char Integer, maximum number of characters per text after cleaning.
+#' Texts longer than this are truncated. Default = 5000.
+#' @param threads Integer, number of threads for fastText. Default =
+#' \code{parallel::detectCores()}.
+#' @param verbose Logical, whether to print progress messages. Default = TRUE.
+#' @param ... Additional parameters passed on to \code{clean_text()}.
+#'
+#' @return A named list of data.tables, each containing texts of one homogeneous
+#' language. The list names correspond to the language codes.
+#' @import data.table
+#' @export
+preprocess <- function(x,
+                       text_col = "text",
+                       id_col = NULL,
+                       lang_guess_col = NULL,
+                       targ_lang,
+                       model_path = NULL,
+                       prob_threshold = 0.25,
+                       und_label = "und",
+                       max_char = 5000,
+                       threads = parallel::detectCores(),
+                       verbose = TRUE,
+                       ...) {
+  if (missing(targ_lang)) stop("'targ_lang' must be specified")
+
+  vmessage <- function(...) if (verbose) message(...)
+
+  # Step 1: run language detection
+  dt <- detect_languages(
+    x = x,
+    text_col = text_col,
+    id_col = id_col,
+    lang_guess_col = lang_guess_col,
+    model_path = model_path,
+    prob_threshold = prob_threshold,
+    und_label = und_label,
+    max_char = max_char,
+    threads = threads,
+    verbose = verbose,
+    ...
+  )
+
+  # Step 2: handle uncertain cases
+  idx_und <- which(dt$lang == und_label)
+
+  if (length(idx_und) > 0) {
+    vmessage("Re-cleaning ", length(idx_und), " uncertain texts...")
+
+    # Re-clean text_orig for these cases
+    dt$text_clean[idx_und] <- clean_text(
+      x = dt$text_orig[idx_und],
+      replace_alphaless = FALSE,
+      return_string = TRUE,
+      verbose = verbose
+    )
+
+    # Replace lang with lang_guess (if available) or targ_lang
+    if ("lang_guess" %in% names(dt)) {
+      dt[idx_und, lang := data.table::fifelse(!is.na(lang_guess) & lang_guess != "",
+                                  lang_guess,
+                                  targ_lang)]
+    } else {
+      dt[idx_und, lang := targ_lang]
+    }
+  }
+
+  # Step 3: split into homogeneous groups
+  out <- split(dt, by = "lang", keep.by = TRUE, sorted = TRUE)
+
+  return(out)
+}
+

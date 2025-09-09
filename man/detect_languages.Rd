@@ -14,7 +14,8 @@ detect_languages(
   und_label = "und",
   max_char = 5000,
   threads = parallel::detectCores(),
-  verbose = TRUE
+  verbose = TRUE,
+  ...
 )
 }
 \arguments{
@@ -45,6 +46,8 @@ Texts longer than this are truncated. Default = 5000.}
 \item{threads}{Integer, number of threads for fastText. Default = parallel::detectCores().}
 
 \item{verbose}{Logical, whether to print progress messages. Default = TRUE.}
+
+\item{...}{Additional parameters passed on to \code{clean_text}.}
 }
 \value{
 A data.table with standardized columns: \code{row_id}, optional \code{id},

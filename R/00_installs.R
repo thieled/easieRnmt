@@ -1,30 +1,41 @@
-#' @title Install and Set Up a Virtual Environment
+
+#' @title Install and Set Up a Conda Environment
 #'
-#' @description Ensures Miniconda is installed, provisions the requested Python
-#' version into it if necessary, creates a virtualenv with that interpreter,
-#' and activates it.
+#' @description
+#' Ensures Miniconda is installed, creates (or recreates) a Conda environment
+#' with the specified name and Python version, and activates it.
+#' This function does not handle fastText installation, as the R package
+#' \pkg{fastText} should be used instead.
 #'
-#' @param python_version Character. Python version for the virtualenv. Default "3.11".
-#' @param venv_name Character. Virtualenv name. Default "r-easynmt".
-#' @param conda_path Character. Path to Miniconda. If NULL, autodetect.
-#' @param ask Logical. If TRUE, prompt before installing Miniconda. Default TRUE.
-#' @param force Logical. If TRUE, force (re)install the venv. Default FALSE.
-#' @param verbose Logical. If TRUE, print progress messages. Default TRUE.
+#' @param conda_env_name Character. The name of the Conda environment to create or use.
+#'   Defaults to `"r-easynmt"`.
+#' @param python_version Character. Python version to use when creating the Conda environment.
+#'   Defaults to `"3.11"`. If the environment already exists, the version is not changed
+#'   unless \code{force = TRUE}.
+#' @param conda_path Character. Optional path to a Miniconda installation. If `NULL`,
+#'   autodetects or installs Miniconda to the default location.
+#' @param ask Logical. If `TRUE`, prompts the user before installing Miniconda.
+#'   Default is `TRUE`.
+#' @param force Logical. If `TRUE`, removes an existing Conda environment with the same
+#'   name before recreating it with the requested Python version. Default is `FALSE`.
+#' @param verbose Logical. If `TRUE`, prints progress messages. Default is `TRUE`.
 #'
-#' @return Invisibly returns NULL.
+#' @return Invisibly returns `NULL`. Called for its side effects of installing and
+#' configuring the Conda environment.
+#'
 #' @export
-install_conda_venv <- function(python_version = "3.11",
-                               venv_name = "r-easynmt",
-                               conda_path = NULL,
-                               ask = TRUE,
-                               force = FALSE,
-                               verbose = TRUE) {
+install_conda_env <- function(conda_env_name = "r-easynmt",
+                              python_version = "3.11",
+                              conda_path = NULL,
+                              ask = TRUE,
+                              force = FALSE,
+                              verbose = TRUE) {
   vmessage <- function(...) if (verbose) message(...)
 
   # Step 1: Ensure Miniconda is installed
   t <- tryCatch({
     if (!is.null(conda_path)) {
-      reticulate::conda_list(conda = file.path(conda_path, "Scripts", "conda.exe"))
+      reticulate::conda_list(conda = file.path(conda_path, "bin", "conda"))
     } else {
       reticulate::conda_list()
     }
@@ -46,112 +57,87 @@ install_conda_venv <- function(python_version = "3.11",
       vmessage("Installing Miniconda at default location.")
       reticulate::install_miniconda(force = force)
     }
-    t <- if (!is.null(conda_path)) {
-      reticulate::conda_list(conda = file.path(conda_path, "Scripts", "conda.exe"))
-    } else {
-      reticulate::conda_list()
-    }
   }
 
-  # Step 2: Define conda binary from chosen installation
+  # Step 2: Check if env exists
+  env_exists <- if (!is.null(conda_path)) {
+    reticulate::condaenv_exists(envname = conda_env_name,
+                                conda = file.path(conda_path, "bin", "conda"))
+  } else {
+    reticulate::condaenv_exists(envname = conda_env_name)
+  }
+
+  # Step 3: Remove env if force = TRUE and it exists
+  if (env_exists && force) {
+    vmessage("Removing existing conda environment: ", conda_env_name)
+    if (!is.null(conda_path)) {
+      reticulate::conda_remove(envname = conda_env_name,
+                               conda = file.path(conda_path, "bin", "conda"))
+    } else {
+      reticulate::conda_remove(envname = conda_env_name)
+    }
+    env_exists <- FALSE
+  }
+
+  # Step 4: Create env if missing
+  if (!env_exists) {
+    vmessage("Creating conda environment: ", conda_env_name)
+    if (!is.null(conda_path)) {
+      reticulate::conda_create(envname = conda_env_name,
+                               conda = file.path(conda_path, "bin", "conda"),
+                               python_version = python_version)
+    } else {
+      reticulate::conda_create(envname = conda_env_name,
+                               python_version = python_version)
+    }
+  } else {
+    vmessage("Conda environment already exists: ", conda_env_name)
+  }
+
+
+  # Step 4: Activate env
+  vmessage("Activating conda environment: ", conda_env_name)
   if (!is.null(conda_path)) {
-    conda_bin <- if (Sys.info()[["sysname"]] == "Windows") {
-      normalizePath(file.path(conda_path, "Scripts", "conda.exe"))
-    } else {
-      normalizePath(file.path(conda_path, "bin", "conda"))
-    }
+    reticulate::use_condaenv(conda_env_name, required = TRUE,
+                             conda = file.path(conda_path, "bin", "conda"))
   } else {
-    t <- reticulate::conda_list()
-    base_python <- t$python[t$name %in% c("base", "root")][1]
-    if (is.na(base_python)) {
-      stop("Could not detect base conda environment.")
-    }
-    if (Sys.info()[["sysname"]] == "Windows") {
-      if (grepl("envs", base_python, ignore.case = TRUE)) {
-        conda_root <- dirname(dirname(dirname(base_python)))
-      } else {
-        conda_root <- dirname(base_python)
-      }
-      conda_bin <- normalizePath(file.path(conda_root, "Scripts", "conda.exe"))
-    } else {
-      if (grepl("envs", base_python)) {
-        conda_root <- dirname(dirname(dirname(base_python)))
-      } else {
-        conda_root <- dirname(dirname(base_python))
-      }
-      conda_bin <- normalizePath(file.path(conda_root, "bin", "conda"))
-    }
+    reticulate::use_condaenv(conda_env_name, required = TRUE)
   }
-
-  # Step 3: Decide which Python to use
-  base_python <- t$python[t$name %in% c("base", "root")][1]
-  base_version <- tryCatch(
-    system2(base_python, "--version", stdout = TRUE, stderr = TRUE),
-    error = function(e) NA
-  )
-  use_env <- NULL
-
-  if (!is.na(base_version) && grepl(python_version, base_version)) {
-    vmessage("Base conda already provides Python ", python_version)
-    py_bin <- base_python
-  } else {
-    use_env <- paste0("py-", gsub("\\.", "", python_version))
-    if (!use_env %in% t$name) {
-      vmessage("Creating conda env ", use_env, " with Python ", python_version)
-      system2(conda_bin, c("create", "-y", "-n", use_env, paste0("python=", python_version)))
-      t <- reticulate::conda_list(conda = conda_bin)
-    }
-    py_bin <- t$python[t$name == use_env]
-  }
-
-  # Step 4: Create the venv with that binary
-  env_exists <- reticulate::virtualenv_exists(envname = venv_name)
-  if (!env_exists || force) {
-    vmessage("Creating virtualenv: ", venv_name, " with Python: ", py_bin)
-    reticulate::virtualenv_create(envname = venv_name, python = py_bin, force = TRUE)
-  } else {
-    vmessage("Virtualenv already exists: ", venv_name)
-  }
-
-  # Step 5: Activate the venv
-  vmessage("Activating virtual environment: ", venv_name)
-  reticulate::use_virtualenv(venv_name, required = TRUE)
 
   invisible(NULL)
 }
 
 
-
-
-
-#' @title Install PyTorch in a Conda Virtual Environment
+#' @title Install PyTorch in a Conda Environment
 #'
 #' @description Installs PyTorch and related libraries (`torch`, `torchvision`, `torchaudio`)
-#' in a Conda environment created with [install_conda_venv()]. The function detects CUDA/GPU
+#' in a Conda environment created with [install_conda_env()]. The function detects CUDA/GPU
 #' availability and installs the appropriate build. If the GPU build URL is invalid, it falls back to CPU.
 #'
-#' @param venv_name Character. Name of the virtual environment. Default "r-easynmt".
+#' @param conda_env_name Character. Name of the conda environment. Default "r-easynmt".
+#' @param python_version Character. Python version to use when creating the Conda environment.
+#'   Defaults to `"3.11"`. If the environment already exists, the version is not changed
+#'   unless \code{force = TRUE}.
 #' @param conda_path Character. Path to Conda installation. If NULL, autodetect.
-#' @param python_version Character. Python version used in the environment. Default "3.11".
 #' @param verbose Logical. If TRUE, prints progress messages. Default TRUE.
 #'
 #' @return Invisibly returns `NULL`.
 #' @export
-install_torch <- function(venv_name = "r-easynmt",
-                          conda_path = NULL,
+install_torch <- function(conda_env_name = "r-easynmt",
                           python_version = "3.11",
+                          conda_path = NULL,
                           verbose = TRUE) {
 
   vmessage <- function(...) if (verbose) message(...)
 
   # Make sure the environment exists
-  install_conda_venv(
+  install_conda_env(
+    conda_env_name = conda_env_name,
     python_version = python_version,
-    venv_name = venv_name,
+    conda_path = conda_path,
     ask = TRUE,
     force = FALSE,
-    verbose = verbose,
-    conda_path = conda_path
+    verbose = verbose
   )
 
   # Detect GPU
@@ -195,19 +181,20 @@ install_torch <- function(venv_name = "r-easynmt",
     cuda_version <- NULL
   }
 
-  vmessage("Installing PyTorch into environment '", venv_name, "' ...")
+  vmessage("Installing PyTorch into conda environment '", conda_env_name, "' ...")
   if (is.null(cuda_version)) {
     vmessage("No CUDA detected. Installing CPU-only build.")
   } else {
     vmessage("CUDA ", cuda_version, " detected. Installing GPU build.")
   }
 
-  # Install via reticulate
+  # Install via reticulate into conda env
   tryCatch({
     reticulate::py_install(
       packages = c("torch", "torchvision", "torchaudio"),
+      envname = conda_env_name,
+      method = "conda",
       pip = TRUE,
-      envname = venv_name,
       pip_options = paste("--index-url", index_url)
     )
     vmessage("Torch installation completed successfully.")
@@ -234,30 +221,26 @@ install_torch <- function(venv_name = "r-easynmt",
 
 
 
-#' Install FastText in a Python virtual environment
+#' @title Install FastText in a Conda Environment
 #'
-#' This function installs the FastText library inside a conda virtual
-#' environment managed through \code{reticulate}. On Windows, a precompiled
-#' wheel is downloaded, unpacked, and installed. On Linux and macOS, the
-#' library is installed directly from PyPI. If installation fails (for example
-#' due to unsupported Python versions), the function does not stop but issues
-#' a warning instead.
+#' @description
+#' Installs the FastText library inside a conda environment managed through
+#' \code{reticulate}. On Windows, a precompiled wheel is downloaded, unpacked,
+#' and installed. On Linux and macOS, the library is installed directly from PyPI.
+#' If installation fails, the function does not stop but issues a warning instead.
 #'
-#' @param wheel_url Character string. URL to the zipped FastText wheel for
-#'   Windows. Defaults to the official release of version 0.9.2 for Python 3.11
-#'   and 64-bit Windows.
+#' @param wheel_url Character string. URL to the zipped FastText wheel for Windows.
+#'   Defaults to the official release of version 0.9.2 for Python 3.11 and 64-bit Windows.
 #' @param python_version Character string. Python version to use when creating
-#'   the conda environment via \code{easieRnmt::install_conda_venv}. Default is
-#'   \code{"3.11"}.
-#' @param venv_name Character string. Name of the conda virtual environment.
+#'   the conda environment via \code{install_conda_env}. Default is \code{"3.11"}.
+#' @param conda_env_name Character string. Name of the conda environment.
 #'   Default is \code{"r-easynmt"}.
-#' @param verbose Logical. If \code{TRUE}, print progress messages during
-#'   installation. Default is \code{TRUE}.
+#' @param verbose Logical. If \code{TRUE}, print progress messages during installation.
+#'   Default is \code{TRUE}.
 #' @param conda_path Optional character string. Path to a conda installation.
 #'   If \code{NULL}, the default conda installation is used.
 #' @param force Logical. If \code{TRUE}, uninstall any existing installations of
-#'   \code{fasttext} or \code{fasttext-wheel} before reinstalling. Default is
-#'   \code{FALSE}.
+#'   \code{fasttext} before reinstalling. Default is \code{FALSE}.
 #'
 #' @return Invisibly returns \code{TRUE} if the function completes. If
 #'   installation fails, warnings are raised but the process continues.
@@ -275,7 +258,7 @@ install_fasttext <- function(
       "14355061/fasttext-0.9.2-cp311-cp311-win_amd64.whl.zip"
     ),
     python_version = "3.11",
-    venv_name = "r-easynmt",
+    conda_env_name = "r-easynmt",
     verbose = TRUE,
     conda_path = NULL,
     force = FALSE
@@ -284,20 +267,21 @@ install_fasttext <- function(
     stop("Please install reticulate first.")
   }
 
-  # ensure venv exists / is activated
-  easieRnmt::install_conda_venv(
-    force = FALSE,
+  # ensure conda env exists / is activated
+  install_conda_env(
+    conda_env_name = conda_env_name,
     python_version = python_version,
-    venv_name = venv_name,
-    verbose = verbose,
-    conda_path = conda_path
+    conda_path = conda_path,
+    ask = TRUE,
+    force = FALSE,
+    verbose = verbose
   )
   py_bin <- reticulate::py_exe()
 
   # cleanup if requested
   if (force) {
     tryCatch({
-      system(sprintf('"%s" -m pip uninstall -y fasttext fasttext-wheel', py_bin))
+      system(sprintf('"%s" -m pip uninstall -y fasttext', py_bin))
     }, error = function(e) {
       warning("Uninstall step failed: ", conditionMessage(e))
     })
@@ -339,32 +323,19 @@ install_fasttext <- function(
 
 
 
-#' Install EasyNMT in a Python virtual environment
+
+#' @title Install EasyNMT in a Conda Environment
 #'
-#' This function installs the EasyNMT library and its dependencies in a conda
-#' virtual environment managed through \code{reticulate}. It creates or
-#' activates the specified environment, installs PyTorch (with CUDA if
-#' available, otherwise CPU), installs FastText (using a precompiled wheel on
-#' Windows), and finally installs EasyNMT with all required dependencies.
-#'
-#' Installation proceeds in several steps:
-#' \enumerate{
-#'   \item The conda environment is created or activated with
-#'     \code{install_conda_venv}. Miniconda is installed if no conda is found.
-#'   \item PyTorch is installed with automatic CUDA/CPU support via
-#'     \code{install_torch}.
-#'   \item FastText is installed with \code{install_fasttext}. On
-#'     Windows, this uses a precompiled wheel and only works for Python
-#'     versions up to 3.11.
-#'   \item The function checks if FastText can be imported. If successful,
-#'     EasyNMT and all dependencies are installed in one step. If not,
-#'     EasyNMT is installed without dependencies and the required packages
-#'     (except fasttext) are installed manually.
-#' }
+#' @description
+#' Installs the EasyNMT library and its dependencies in a conda environment
+#' managed through \code{reticulate}. It creates or activates the specified
+#' environment, installs PyTorch (with CUDA if available, otherwise CPU),
+#' installs FastText (using a precompiled wheel on Windows), and finally
+#' installs EasyNMT with all required dependencies.
 #'
 #' @param python_version Character string. Python version to use when creating
 #'   the conda environment. Default is \code{"3.11"}.
-#' @param venv_name Character string. Name of the conda virtual environment to
+#' @param conda_env_name Character string. Name of the conda environment to
 #'   create or activate. Default is \code{"r-easynmt"}.
 #' @param ask Logical. If \code{TRUE}, ask before installing Miniconda. Default
 #'   is \code{TRUE}.
@@ -381,9 +352,9 @@ install_fasttext <- function(
 #'
 #' @details
 #' On Windows, FastText is not officially supported and compilation from source
-#' often fails. The helper function \code{install_fasttext} installs
-#' a precompiled wheel, which only works for Python versions up to 3.11. On
-#' Linux and macOS, FastText can be installed directly from PyPI.
+#' often fails. The helper function \code{install_fasttext} installs a
+#' precompiled wheel, which only works for Python versions up to 3.11. On Linux
+#' and macOS, FastText can be installed directly from PyPI.
 #'
 #' The function installs the following dependencies if FastText is not
 #' available: \code{nltk}, \code{numpy}, \code{protobuf}, \code{sentencepiece},
@@ -393,9 +364,9 @@ install_fasttext <- function(
 #' @export
 install_easynmt <- function(
     python_version = "3.11",
-    venv_name = "r-easynmt",
+    conda_env_name = "r-easynmt",
     ask = TRUE,
-    force = T,
+    force = TRUE,
     verbose = TRUE,
     conda_path = NULL
 ) {
@@ -403,25 +374,30 @@ install_easynmt <- function(
     stop("Please install reticulate first.")
   }
 
-  # Install or activate venv. Installs miniconda if not present.
-  install_conda_venv(
+  # 1. Install or activate conda env (installs miniconda if not present)
+  install_conda_env(
     python_version = python_version,
-    venv_name = venv_name,
+    conda_env_name = conda_env_name,
     ask = ask,
     force = force,
     verbose = verbose,
-    conda_path = conda_path)
+    conda_path = conda_path
+  )
 
-  # Install pytorch, with automatic CUDA or CPU support.
-  install_torch()
+  # 2. Install PyTorch, with automatic CUDA or CPU support
+  install_torch(conda_env_name = conda_env_name,
+                conda_path = conda_path,
+                verbose = verbose)
 
-  # Install fasttext, building from prebuilt wheel for windows. Only works in Py <= 3.11
-  install_fasttext(force = T)
+  # 3. Install FastText (prebuilt wheel for Windows)
+  install_fasttext(python_version = python_version,
+                   conda_env_name = conda_env_name,
+                   verbose = verbose,
+                   conda_path = conda_path,
+                   force = TRUE)
 
-  # Check success of fasttext installation
+  # 4. Check if FastText works
   py_bin <- reticulate::py_exe()
-
-  # check if fasttext can be imported and used
   check_code <- "
 try:
     import fasttext
@@ -437,15 +413,16 @@ except Exception:
 
   fasttext_ok <- any(grepl("^OK$", result))
 
+  # 5. Install EasyNMT (+ deps) depending on FastText availability
   if (fasttext_ok) {
-    message("fasttext detected. Installing easynmt with dependencies...")
+    message("FastText detected. Installing EasyNMT with dependencies...")
     cmd <- sprintf(
       '"%s" -m pip install easynmt nltk numpy protobuf sentencepiece torch tqdm transformers langdetect sacremoses',
       py_bin
     )
     system(cmd)
   } else {
-    warning("fasttext not detected. Installing easynmt without fasttext and adding other dependencies...")
+    warning("FastText not detected. Installing EasyNMT without FastText and adding other dependencies...")
     cmd1 <- sprintf('"%s" -m pip install easynmt --no-deps', py_bin)
     cmd2 <- sprintf(
       '"%s" -m pip install nltk numpy protobuf sentencepiece torch tqdm transformers langdetect sacremoses',
@@ -455,7 +432,7 @@ except Exception:
     system(cmd2)
   }
 
-  # Set global option that easynmt is initialized
+  # 6. Mark EasyNMT as initialized
   options("easynmt_initialized" = TRUE)
 
   invisible(TRUE)
@@ -463,12 +440,13 @@ except Exception:
 
 
 
-#' Initialize the r-easynmt Python environment
+#' @title Initialize the r-easynmt Conda Environment
 #'
-#' This function initializes and verifies the Python environment used by
-#' \pkg{easieRnmt}. It builds on \code{\link{install_easynmt}} by activating
-#' the specified virtual environment, checking the Python configuration,
-#' and verifying that required Python packages are correctly installed.
+#' @description
+#' Initializes and verifies the Python environment used by \pkg{easieRnmt}.
+#' It builds on \code{\link{install_easynmt}} by activating the specified
+#' conda environment, checking the Python configuration, and verifying that
+#' required Python packages are correctly installed.
 #'
 #' Specifically, the function:
 #' \itemize{
@@ -485,7 +463,7 @@ except Exception:
 #'
 #' @param python_version Character scalar. Python version to use for the
 #' environment. Default is \code{"3.11"}.
-#' @param venv_name Character scalar. Name of the virtual environment to
+#' @param conda_env_name Character scalar. Name of the conda environment to
 #' create or activate. Default is \code{"r-easynmt"}.
 #' @param ask Logical. If \code{TRUE}, prompt the user before creating or
 #' overwriting an environment. Default is \code{TRUE}.
@@ -498,59 +476,61 @@ except Exception:
 #' installation to use. If \code{NULL}, the default conda installation is
 #' used.
 #'
-#' @details
-#' This function is typically called once at the beginning of a session to
-#' prepare the Python backend for translation tasks. It assumes that
-#' \code{\link{install_easynmt}} has been run at least once to set up the
-#' required environment.
-#'
-#' Note that \code{fasttext} is optional. If it is not available, EasyNMT
-#' can still work with \code{langdetect} or \code{langid} for language
-#' detection, but automatic detection may be less accurate. In such cases,
-#' it is recommended to specify the source language explicitly when calling
-#' translation functions.
-#'
 #' @return This function is called for its side effects. It prints messages
 #' about the environment and package versions if \code{verbose = TRUE}, and
 #' sets the global option \code{easynmt_initialized = TRUE}.
 #'
 #' @export
 initialize_easynmt <- function(python_version = "3.11",
-                               venv_name = "r-easynmt",
+                               conda_env_name = "r-easynmt",
                                ask = TRUE,
                                force = FALSE,
                                verbose = TRUE,
-                               conda_path = NULL){
+                               conda_path = NULL) {
 
-  # Helper function for verbose messages
-  vmessage <- function(...) {
-    if (verbose) message(...)
-  }
+  vmessage <- function(...) if (verbose) message(...)
 
-  if (!is.null(options("easynmt_initialized")$easynmt_initialized)){
+  if (!is.null(options("easynmt_initialized")$easynmt_initialized)) {
     vmessage("r-easynmt environment is already initialized.")
-  }else{
-    install_easynmt(python_version = python_version,
-                    venv_name = venv_name,
-                    ask = ask,
-                    force = force,
-                    verbose = verbose,
-                    conda_path = conda_path)
+  } else {
+
+    install_conda_env(python_version = python_version,
+                      conda_env_name = conda_env_name,
+                      ask = ask,
+                      force = force,
+                      verbose = verbose,
+                      conda_path = conda_path)
+
+    # Check if torch is available
+    if (!reticulate::py_module_available("torch")) {
+      install_torch(conda_env_name = conda_env_name,
+                    conda_path = conda_path,
+                    verbose = verbose)
+    }
+
+    # Check if easynmt is available
+    if (!reticulate::py_module_available("easynmt")) {
+      install_easynmt(python_version = python_version,
+                      conda_env_name = conda_env_name,
+                      ask = ask,
+                      force = force,
+                      verbose = verbose,
+                      conda_path = conda_path)
+    }
   }
 
   # Verify Python installation
   cfg <- tryCatch(reticulate::py_config(), error = function(e) NULL)
-
-  venv <- basename(Sys.getenv("VIRTUAL_ENV", unset = Sys.getenv("CONDA_DEFAULT_ENV", unset = "none")))
   python <- if (!is.null(cfg)) cfg$python else "not initialized"
+  libpython <- if (!is.null(cfg)) cfg$libpython else "not initialized"
   version <- if (is.null(cfg) || all(is.na(cfg$version))) "unknown" else
     if (is.character(cfg$version)) cfg$version else paste(cfg$version, collapse = ".")
 
-  vmessage("Active env: ", venv)
   vmessage("Python: ", python)
+  vmessage("Libpython: ", libpython)
   vmessage("Python Version: ", version)
 
-  # Verify pytorch installation
+  # Verify PyTorch installation
   tryCatch({
     torch <- reticulate::import("torch")
     vmessage("Torch version: ", torch$`__version__`)
@@ -559,8 +539,7 @@ initialize_easynmt <- function(python_version = "3.11",
     stop("Verification failed: Torch is not properly installed.")
   })
 
-  # Verify fasttext and EasyNMT install
-  # Helper to safely get Python package version via importlib.metadata
+  # Helper to get Python package version via importlib.metadata
   get_py_version <- function(pkg) {
     tryCatch(
       {
@@ -573,11 +552,9 @@ initialize_easynmt <- function(python_version = "3.11",
     )
   }
 
-  # Get versions
   easynmt_ver  <- get_py_version("easynmt")
   fasttext_ver <- get_py_version("fasttext")
 
-  # Messages
   if (!is.na(fasttext_ver)) {
     vmessage("fasttext version: ", fasttext_ver)
   } else {
@@ -590,9 +567,7 @@ initialize_easynmt <- function(python_version = "3.11",
     vmessage("EasyNMT not found in active Python environment.")
   }
 
-
-  # Set global option that easynmt is initialized
   options("easynmt_initialized" = TRUE)
-
 }
+
 

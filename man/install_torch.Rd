@@ -2,21 +2,14 @@
 % Please edit documentation in R/00_installs.R
 \name{install_torch}
 \alias{install_torch}
-\title{Install PyTorch in a Conda Virtual Environment}
+\title{Install PyTorch in a Conda Environment}
 \usage{
-install_torch(
-  venv_name = "r-easynmt",
-  conda_path = NULL,
-  python_version = "3.11",
-  verbose = TRUE
-)
+install_torch(conda_env_name = "r-easynmt", conda_path = NULL, verbose = TRUE)
 }
 \arguments{
-\item{venv_name}{Character. Name of the virtual environment. Default "r-easynmt".}
+\item{conda_env_name}{Character. Name of the conda environment. Default "r-easynmt".}
 
 \item{conda_path}{Character. Path to Conda installation. If NULL, autodetect.}
-
-\item{python_version}{Character. Python version used in the environment. Default "3.11".}
 
 \item{verbose}{Logical. If TRUE, prints progress messages. Default TRUE.}
 }
@@ -25,6 +18,6 @@ Invisibly returns \code{NULL}.
 }
 \description{
 Installs PyTorch and related libraries (\code{torch}, \code{torchvision}, \code{torchaudio})
-in a Conda environment created with \code{\link[=install_conda_venv]{install_conda_venv()}}. The function detects CUDA/GPU
+in a Conda environment created with \code{\link[=install_conda_env]{install_conda_env()}}. The function detects CUDA/GPU
 availability and installs the appropriate build. If the GPU build URL is invalid, it falls back to CPU.
 }
