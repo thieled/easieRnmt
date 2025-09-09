@@ -4,24 +4,7 @@
 #'   into homogeneous language groups, and calls the Python translator
 #'   (\code{easynmt_translate()}) on each group.
 #'
-#' @param x Character vector or data.frame containing texts to process.
-#' @param text_col Character, name of the text column if \code{x} is a data.frame.
-#'   Ignored if \code{x} is a character vector. Default = "text".
-#' @param id_col Character, optional column name in the input data.frame to
-#'   preserve as an identifier. Default = NULL.
-#' @param lang_guess_col Character, optional column name in the input data.frame
-#'   to preserve as a column named \code{lang_guess}. Default = NULL.
-#' @param targ_lang Character, fallback language code to assign when fastText
-#'   detection is uncertain and no \code{lang_guess} is available. Required.
-#' @param model_path Character, path to the fastText \code{lid.176.bin} model.
-#'   Defaults to \code{~/.cache/easieRnmt/lid.176.bin}.
-#' @param prob_threshold Numeric, threshold below which the detected language is
-#'   replaced by \code{und_label}. Default = 0.25.
-#' @param und_label Character, label for undefined language. Default = "und".
-#' @param max_char Integer, maximum number of characters per text after cleaning.
-#'   Texts longer than this are truncated. Default = 5000.
-#' @param threads Integer, number of threads for fastText. Default =
-#'   \code{parallel::detectCores()}.
+#' @inheritParams preprocess
 #' @param target_lang Character, target language for translation.
 #' @param model Character, translation model (default "opus-mt").
 #' @param seed Integer, random seed (default 42).
@@ -29,11 +12,12 @@
 #' @param max_length_tl Integer, maximum token length (default 512L).
 #' @param beam_size Integer, beam size (default 1L).
 #' @param deterministic Logical, enforce deterministic cudnn ops (default TRUE).
-#' @param verbose Logical, show progress (default TRUE).
 #' @param check_translation Logical, perform retry check (default FALSE).
 #' @param n_retries Integer, number of retries if check fails (default 3L).
 #' @param div_threshold Numeric, threshold for retry trigger (default 0.5).
 #' @param return_string Logical, if TRUE, return only the translated character vector. Default = FALSE.
+#' @param save_dir Optional character path. If provided, saves each processed
+#'   subset as an \code{.rds} file with its language/part name.
 #' @param ... Additional parameters passed on to \code{clean_text()} during preprocessing.
 #'
 #' @return A data.table with original data plus translation results merged in.
@@ -61,6 +45,7 @@ translate <- function(
     n_retries = 3L,
     div_threshold = 0.5,
     return_string = FALSE,
+    save_dir = NULL,
     ...
 ) {
   vmessage <- function(...) if (verbose) message(...)
@@ -70,21 +55,26 @@ translate <- function(
     stop("EasyNMT environment not initialized. Please run initialize_easynmt() first.")
   }
 
-  # --- Run preprocessing (always inside translate) ---
-  preproc_list <- preprocess(
-    x = x,
-    text_col = text_col,
-    id_col = id_col,
-    lang_guess_col = lang_guess_col,
-    targ_lang = targ_lang,
-    model_path = model_path,
-    prob_threshold = prob_threshold,
-    und_label = und_label,
-    max_char = max_char,
-    threads = threads,
-    verbose = verbose,
-    ...
-  )
+  # --- Step 1: check if x is already preprocessed ---
+  if (is.list(x) && all(c("row_id", "lang", "text_clean") %in% names(x[[1]]))) {
+    preproc_list <- x
+    vmessage("Input detected as preprocessed. Skipping preprocess().")
+  } else {
+    preproc_list <- preprocess(
+      x = x,
+      text_col = text_col,
+      id_col = id_col,
+      lang_guess_col = lang_guess_col,
+      targ_lang = targ_lang,
+      model_path = model_path,
+      prob_threshold = prob_threshold,
+      und_label = und_label,
+      max_char = max_char,
+      threads = threads,
+      verbose = verbose,
+      ...
+    )
+  }
 
   # --- Helper for one subset ---
   process_one <- function(dt, lang_name) {
@@ -125,23 +115,31 @@ translate <- function(
       out[is.na(text_orig), translation := NA_character_]
     }
 
+    # Optional saving
+    if (!is.null(save_dir)) {
+      if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
+      file_path <- file.path(save_dir, paste0(lang_name, ".rds"))
+      saveRDS(out, file_path)
+      vmessage("Saved translated chunk to: ", file_path)
+    }
+
     return(out[])
   }
 
-  # --- Apply to all language groups ---
+  # --- Step 2: Apply to all language groups ---
   out_list <- pbapply::pblapply(
     X = seq_along(preproc_list),
     FUN = function(i) process_one(preproc_list[[i]], names(preproc_list)[i]),
     cl = NULL
   )
 
-  # --- Bind results ---
+  # --- Step 3: Bind results ---
   out <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
   data.table::setorder(out, row_id)
 
-  if(return_string){
+  if (return_string) {
     return(out$translation)
-  }else{
+  } else {
     return(out[])
   }
 }

@@ -27,6 +27,7 @@ translate(
   n_retries = 3L,
   div_threshold = 0.5,
   return_string = FALSE,
+  save_dir = NULL,
   ...
 )
 }
@@ -73,7 +74,7 @@ Texts longer than this are truncated. Default = 5000.}
 
 \item{deterministic}{Logical, enforce deterministic cudnn ops (default TRUE).}
 
-\item{verbose}{Logical, show progress (default TRUE).}
+\item{verbose}{Logical, whether to print progress messages. Default = TRUE.}
 
 \item{check_translation}{Logical, perform retry check (default FALSE).}
 
@@ -82,6 +83,9 @@ Texts longer than this are truncated. Default = 5000.}
 \item{div_threshold}{Numeric, threshold for retry trigger (default 0.5).}
 
 \item{return_string}{Logical, if TRUE, return only the translated character vector. Default = FALSE.}
+
+\item{save_dir}{Optional character path. If provided, saves each processed
+subset as an \code{.rds} file with its language/part name.}
 
 \item{...}{Additional parameters passed on to \code{clean_text()} during preprocessing.}
 }

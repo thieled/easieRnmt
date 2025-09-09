@@ -14,6 +14,7 @@ preprocess(
   prob_threshold = 0.25,
   und_label = "und",
   max_char = 5000,
+  chunk_size = NULL,
   threads = parallel::detectCores(),
   verbose = TRUE,
   ...
@@ -45,6 +46,11 @@ replaced by \code{und_label}. Default = 0.25.}
 \item{max_char}{Integer, maximum number of characters per text after cleaning.
 Texts longer than this are truncated. Default = 5000.}
 
+\item{chunk_size}{Integer, optional. If provided, split each homogeneous
+language data.table into chunks of at most \code{chunk_size} rows.
+Chunked tables are suffixed with \code{"_pt1"}, \code{"_pt2"}, etc.
+Default = NULL (no further splitting).}
+
 \item{threads}{Integer, number of threads for fastText. Default =
 \code{parallel::detectCores()}.}
 
@@ -54,10 +60,12 @@ Texts longer than this are truncated. Default = 5000.}
 }
 \value{
 A named list of data.tables, each containing texts of one homogeneous
-language. The list names correspond to the language codes.
+language or language+part chunk. The list names correspond to the language
+codes (or suffixed with \code{"_pt"} for chunked groups).
 }
 \description{
 Wrapper around \code{detect_languages()} that detects languages,
 reprocesses low-confidence cases, and splits the data into homogeneous
-language groups for translation.
+language groups for translation. Optionally splits large groups into
+smaller chunks.
 }

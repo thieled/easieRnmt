@@ -288,7 +288,8 @@ detect_languages <- function(x,
 #'
 #' @description Wrapper around \code{detect_languages()} that detects languages,
 #' reprocesses low-confidence cases, and splits the data into homogeneous
-#' language groups for translation.
+#' language groups for translation. Optionally splits large groups into
+#' smaller chunks.
 #'
 #' @param x Character vector or data.frame containing texts to process.
 #' @param text_col Character, name of the text column if \code{x} is a data.frame.
@@ -306,13 +307,18 @@ detect_languages <- function(x,
 #' @param und_label Character, label for undefined language. Default = "und".
 #' @param max_char Integer, maximum number of characters per text after cleaning.
 #' Texts longer than this are truncated. Default = 5000.
+#' @param chunk_size Integer, optional. If provided, split each homogeneous
+#' language data.table into chunks of at most \code{chunk_size} rows.
+#' Chunked tables are suffixed with \code{"_pt1"}, \code{"_pt2"}, etc.
+#' Default = NULL (no further splitting).
 #' @param threads Integer, number of threads for fastText. Default =
 #' \code{parallel::detectCores()}.
 #' @param verbose Logical, whether to print progress messages. Default = TRUE.
 #' @param ... Additional parameters passed on to \code{clean_text()}.
 #'
 #' @return A named list of data.tables, each containing texts of one homogeneous
-#' language. The list names correspond to the language codes.
+#' language or language+part chunk. The list names correspond to the language
+#' codes (or suffixed with \code{"_pt"} for chunked groups).
 #' @import data.table
 #' @export
 preprocess <- function(x,
@@ -324,6 +330,7 @@ preprocess <- function(x,
                        prob_threshold = 0.25,
                        und_label = "und",
                        max_char = 5000,
+                       chunk_size = NULL,
                        threads = parallel::detectCores(),
                        verbose = TRUE,
                        ...) {
@@ -363,8 +370,8 @@ preprocess <- function(x,
     # Replace lang with lang_guess (if available) or targ_lang
     if ("lang_guess" %in% names(dt)) {
       dt[idx_und, lang := data.table::fifelse(!is.na(lang_guess) & lang_guess != "",
-                                  lang_guess,
-                                  targ_lang)]
+                                              lang_guess,
+                                              targ_lang)]
     } else {
       dt[idx_und, lang := targ_lang]
     }
@@ -373,6 +380,26 @@ preprocess <- function(x,
   # Step 3: split into homogeneous groups
   out <- split(dt, by = "lang", keep.by = TRUE, sorted = TRUE)
 
+  # Step 4: optional chunking
+  if (!is.null(chunk_size)) {
+    chunked_out <- list()
+    for (lang_name in names(out)) {
+      dt_lang <- out[[lang_name]]
+      n <- nrow(dt_lang)
+      if (n > chunk_size) {
+        nchunks <- ceiling(n / chunk_size)
+        idx_split <- split(seq_len(n), ceiling(seq_along(seq_len(n)) / chunk_size))
+        for (i in seq_along(idx_split)) {
+          chunk <- dt_lang[idx_split[[i]], ]
+          chunk_name <- paste0(lang_name, "_pt", i)
+          chunked_out[[chunk_name]] <- chunk
+        }
+      } else {
+        chunked_out[[lang_name]] <- dt_lang
+      }
+    }
+    out <- chunked_out
+  }
+
   return(out)
 }
-
