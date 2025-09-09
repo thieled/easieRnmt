@@ -2,11 +2,11 @@
 % Please edit documentation in R/00_installs.R
 \name{initialize_easynmt}
 \alias{initialize_easynmt}
-\title{Initialize the r-easynmt Python environment}
+\title{Initialize the r-easynmt Conda Environment}
 \usage{
 initialize_easynmt(
   python_version = "3.11",
-  venv_name = "r-easynmt",
+  conda_env_name = "r-easynmt",
   ask = TRUE,
   force = FALSE,
   verbose = TRUE,
@@ -17,7 +17,7 @@ initialize_easynmt(
 \item{python_version}{Character scalar. Python version to use for the
 environment. Default is \code{"3.11"}.}
 
-\item{venv_name}{Character scalar. Name of the virtual environment to
+\item{conda_env_name}{Character scalar. Name of the conda environment to
 create or activate. Default is \code{"r-easynmt"}.}
 
 \item{ask}{Logical. If \code{TRUE}, prompt the user before creating or
@@ -40,12 +40,11 @@ about the environment and package versions if \code{verbose = TRUE}, and
 sets the global option \code{easynmt_initialized = TRUE}.
 }
 \description{
-This function initializes and verifies the Python environment used by
-\pkg{easieRnmt}. It builds on \code{\link{install_easynmt}} by activating
-the specified virtual environment, checking the Python configuration,
-and verifying that required Python packages are correctly installed.
-}
-\details{
+Initializes and verifies the Python environment used by \pkg{easieRnmt}.
+It builds on \code{\link{install_easynmt}} by activating the specified
+conda environment, checking the Python configuration, and verifying that
+required Python packages are correctly installed.
+
 Specifically, the function:
 \itemize{
 \item Ensures that the Python environment created by
@@ -58,15 +57,4 @@ and reports their versions.
 \item Sets a global option (\code{easynmt_initialized = TRUE}) so that
 subsequent calls can skip redundant initialization.
 }
-
-This function is typically called once at the beginning of a session to
-prepare the Python backend for translation tasks. It assumes that
-\code{\link{install_easynmt}} has been run at least once to set up the
-required environment.
-
-Note that \code{fasttext} is optional. If it is not available, EasyNMT
-can still work with \code{langdetect} or \code{langid} for language
-detection, but automatic detection may be less accurate. In such cases,
-it is recommended to specify the source language explicitly when calling
-translation functions.
 }

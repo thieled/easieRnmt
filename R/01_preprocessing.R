@@ -140,9 +140,11 @@ clean_text <- function(x,
   # keep only letters, numbers, punctuation, whitespace
   dt[, text_clean := stringi::stri_replace_all_regex(text_clean, "[^\\p{L}\\p{N}\\p{P}\\p{Zs}]", " ")]
 
+
   dt[, text_clean := iconv(text_clean, from = "", to = "UTF-8", sub = " ")]
   dt[nchar(text_clean) > max_char, text_clean := substr(text_clean, 1, max_char)]
   if(replace_alphaless) dt[!grepl("[[:alpha:]]", text_clean), text_clean := ""]
+  dt[, text_clean := textclean::replace_curly_quote(text_clean)]
   dt[, text_clean := stringr::str_squish(text_clean)]
 
   # Ensure column order: row_id, id?, text_orig, text_clean, lang_guess?

@@ -4,10 +4,19 @@
 \alias{install_torch}
 \title{Install PyTorch in a Conda Environment}
 \usage{
-install_torch(conda_env_name = "r-easynmt", conda_path = NULL, verbose = TRUE)
+install_torch(
+  conda_env_name = "r-easynmt",
+  python_version = "3.11",
+  conda_path = NULL,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{conda_env_name}{Character. Name of the conda environment. Default "r-easynmt".}
+
+\item{python_version}{Character. Python version to use when creating the Conda environment.
+Defaults to \code{"3.11"}. If the environment already exists, the version is not changed
+unless \code{force = TRUE}.}
 
 \item{conda_path}{Character. Path to Conda installation. If NULL, autodetect.}
 

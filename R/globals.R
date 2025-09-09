@@ -1,4 +1,5 @@
 utils::globalVariables(c(".I",
+                         ".",
                          ":=",
                          "row_id",
                          "text",
@@ -7,5 +8,12 @@ utils::globalVariables(c(".I",
                          "lang_guess",
                          "text_clean",
                          "text_orig",
-                         "..cols_exist")
+                         "..cols_exist",
+                         "error",
+                         "lang_target",
+                         "tl_datetime",
+                         "tl_model",
+                         "translation",
+                         "return_string"
+                         )
 )

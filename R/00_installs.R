@@ -323,6 +323,41 @@ install_fasttext <- function(
 
 
 
+#' @title Install Python Dependencies for easieRnmt
+#' @description Installs required Python dependencies into the active environment.
+#' This function can be extended with additional packages as needed.
+#' @param packages Character vector of Python packages to install.
+#'   Default includes "pytz" and "python-dateutil".
+#' @param envname Name of the conda or virtual environment where packages
+#'   should be installed. If NULL, installs into the active environment.
+#' @param method Installation method passed to reticulate::py_install
+#'   ("auto", "virtualenv", or "conda").
+#' @param pip Logical; if TRUE, force installation via pip.
+#' @param ... Further arguments passed to reticulate::py_install().
+#' @export
+install_deps <- function(
+    packages = c("pytz", "python-dateutil"),
+    envname = NULL,
+    method = "auto",
+    pip = TRUE,
+    ...
+) {
+  tryCatch({
+    reticulate::py_install(
+      packages = packages,
+      envname = envname,
+      method = method,
+      pip = pip,
+      ...
+    )
+    message("Successfully installed Python dependencies: ", paste(packages, collapse = ", "))
+  }, error = function(e) {
+    warning("Failed to install dependencies: ", conditionMessage(e))
+  })
+}
+
+
+
 
 #' @title Install EasyNMT in a Conda Environment
 #'
@@ -432,7 +467,15 @@ except Exception:
     system(cmd2)
   }
 
-  # 6. Mark EasyNMT as initialized
+  # 6. Install additional dependencies via install_deps()
+  install_deps(
+    packages = c("pytz", "python-dateutil"),  # extend this vector later
+    envname  = conda_env_name,
+    method   = "conda",
+    pip      = TRUE
+  )
+
+  # 7. Mark EasyNMT as initialized
   options("easynmt_initialized" = TRUE)
 
   invisible(TRUE)
@@ -567,7 +610,14 @@ initialize_easynmt <- function(python_version = "3.11",
     vmessage("EasyNMT not found in active Python environment.")
   }
 
+  # Source the Python translation script so easynmt_translate is available
+  pyfile <- system.file("python", "easynmt_translate.py", package = "easieRnmt", mustWork = TRUE)
+  reticulate::source_python(pyfile)
+
+  if (!"easynmt_translate" %in% reticulate::py_list_attributes(reticulate::py)) {
+    stop("'easynmt_translate' function could not be sourced from Python.")
+  }
+
   options("easynmt_initialized" = TRUE)
 }
-
 

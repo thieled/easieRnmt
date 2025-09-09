@@ -2,13 +2,13 @@
 % Please edit documentation in R/00_installs.R
 \name{install_easynmt}
 \alias{install_easynmt}
-\title{Install EasyNMT in a Python virtual environment}
+\title{Install EasyNMT in a Conda Environment}
 \usage{
 install_easynmt(
   python_version = "3.11",
-  venv_name = "r-easynmt",
+  conda_env_name = "r-easynmt",
   ask = TRUE,
-  force = T,
+  force = TRUE,
   verbose = TRUE,
   conda_path = NULL
 )
@@ -17,7 +17,7 @@ install_easynmt(
 \item{python_version}{Character string. Python version to use when creating
 the conda environment. Default is \code{"3.11"}.}
 
-\item{venv_name}{Character string. Name of the conda virtual environment to
+\item{conda_env_name}{Character string. Name of the conda environment to
 create or activate. Default is \code{"r-easynmt"}.}
 
 \item{ask}{Logical. If \code{TRUE}, ask before installing Miniconda. Default
@@ -38,32 +38,17 @@ If FastText cannot be installed or imported, the function will still
 attempt to install EasyNMT without FastText and issue a warning.
 }
 \description{
-This function installs the EasyNMT library and its dependencies in a conda
-virtual environment managed through \code{reticulate}. It creates or
-activates the specified environment, installs PyTorch (with CUDA if
-available, otherwise CPU), installs FastText (using a precompiled wheel on
-Windows), and finally installs EasyNMT with all required dependencies.
+Installs the EasyNMT library and its dependencies in a conda environment
+managed through \code{reticulate}. It creates or activates the specified
+environment, installs PyTorch (with CUDA if available, otherwise CPU),
+installs FastText (using a precompiled wheel on Windows), and finally
+installs EasyNMT with all required dependencies.
 }
 \details{
-Installation proceeds in several steps:
-\enumerate{
-\item The conda environment is created or activated with
-\code{install_conda_venv}. Miniconda is installed if no conda is found.
-\item PyTorch is installed with automatic CUDA/CPU support via
-\code{install_torch}.
-\item FastText is installed with \code{install_fasttext}. On
-Windows, this uses a precompiled wheel and only works for Python
-versions up to 3.11.
-\item The function checks if FastText can be imported. If successful,
-EasyNMT and all dependencies are installed in one step. If not,
-EasyNMT is installed without dependencies and the required packages
-(except fasttext) are installed manually.
-}
-
 On Windows, FastText is not officially supported and compilation from source
-often fails. The helper function \code{install_fasttext} installs
-a precompiled wheel, which only works for Python versions up to 3.11. On
-Linux and macOS, FastText can be installed directly from PyPI.
+often fails. The helper function \code{install_fasttext} installs a
+precompiled wheel, which only works for Python versions up to 3.11. On Linux
+and macOS, FastText can be installed directly from PyPI.
 
 The function installs the following dependencies if FastText is not
 available: \code{nltk}, \code{numpy}, \code{protobuf}, \code{sentencepiece},
