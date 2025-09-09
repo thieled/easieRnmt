@@ -1,7 +1,8 @@
 #' @title Preprocess and Translate Texts
 #'
-#' @description Detects languages, reprocesses uncertain cases, splits the input
-#'   into homogeneous language groups, and calls the Python translator
+#' @description Detects languages, reprocesses uncertain cases, optionally
+#'   splits long texts into sentences, splits the input into homogeneous
+#'   language groups, and calls the Python translator
 #'   (\code{easynmt_translate()}) on each group.
 #'
 #' @inheritParams preprocess
@@ -18,6 +19,8 @@
 #' @param return_string Logical, if TRUE, return only the translated character vector. Default = FALSE.
 #' @param save_dir Optional character path. If provided, saves each processed
 #'   subset as an \code{.rds} file with its language/part name.
+#' @param tokenize_sentences Logical, if TRUE, split long texts into sentences
+#'   during preprocessing and reassemble them after translation. Default = FALSE.
 #' @param ... Additional parameters passed on to \code{clean_text()} during preprocessing.
 #'
 #' @return A data.table with original data plus translation results merged in.
@@ -46,6 +49,7 @@ translate <- function(
     div_threshold = 0.5,
     return_string = FALSE,
     save_dir = NULL,
+    tokenize_sentences = FALSE,
     ...
 ) {
   vmessage <- function(...) if (verbose) message(...)
@@ -72,6 +76,7 @@ translate <- function(
       max_char = max_char,
       threads = threads,
       verbose = verbose,
+      tokenize_sentences = tokenize_sentences,
       ...
     )
   }
@@ -135,7 +140,40 @@ translate <- function(
 
   # --- Step 3: Bind results ---
   out <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
-  data.table::setorder(out, row_id)
+
+  # --- Step 4: Reassemble tokenized sentences ---
+  if (tokenize_sentences && any(grepl("^[0-9]+_\\d+$", out$row_id))) {
+    out[, orig_row_id := sub("_\\d+$", "", row_id)]
+
+    stitched <- out[grepl("^[0-9]+_\\d+$", row_id),
+                    {
+                      res <- list(
+                        row_id      = unique(orig_row_id),
+                        text_clean  = paste(text_clean, collapse = " "),
+                        translation = paste(translation, collapse = " ")
+                      )
+                      if ("lang" %in% names(.SD))        res$lang        <- lang[1]
+                      if ("lang_target" %in% names(.SD)) res$lang_target <- lang_target[1]
+                      if ("tl_error" %in% names(.SD))    res$tl_error    <- tl_error[1]
+                      if ("tl_datetime" %in% names(.SD)) res$tl_datetime <- tl_datetime[1]
+                      if ("tl_model" %in% names(.SD))    res$tl_model    <- tl_model[1]
+                      if ("text_orig" %in% names(.SD))   res$text_orig   <- text_orig[1]
+                      if ("id" %in% names(.SD))          res$id          <- id[1]
+                      if ("lang_guess" %in% names(.SD))  res$lang_guess  <- lang_guess[1]
+                      res
+                    },
+                    by = orig_row_id
+    ]
+
+    not_tokenized <- out[!grepl("^[0-9]+_\\d+$", row_id)]
+
+    out <- data.table::rbindlist(list(not_tokenized, stitched), use.names = TRUE, fill = TRUE)
+    out[, row_id := as.integer(row_id)]
+    data.table::setorder(out, row_id)
+    out[, orig_row_id := NULL]
+  } else {
+    data.table::setorder(out, row_id)
+  }
 
   if (return_string) {
     return(out$translation)

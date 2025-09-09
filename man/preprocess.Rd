@@ -15,6 +15,7 @@ preprocess(
   und_label = "und",
   max_char = 5000,
   chunk_size = NULL,
+  tokenize_sentences = FALSE,
   threads = parallel::detectCores(),
   verbose = TRUE,
   ...
@@ -50,6 +51,9 @@ Texts longer than this are truncated. Default = 5000.}
 language data.table into chunks of at most \code{chunk_size} rows.
 Chunked tables are suffixed with \code{"_pt1"}, \code{"_pt2"}, etc.
 Default = NULL (no further splitting).}
+
+\item{tokenize_sentences}{Logical, whether to split texts with more than
+3 sentences into individual sentences. Default = FALSE.}
 
 \item{threads}{Integer, number of threads for fastText. Default =
 \code{parallel::detectCores()}.}

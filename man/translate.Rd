@@ -28,6 +28,7 @@ translate(
   div_threshold = 0.5,
   return_string = FALSE,
   save_dir = NULL,
+  tokenize_sentences = FALSE,
   ...
 )
 }
@@ -87,13 +88,17 @@ Texts longer than this are truncated. Default = 5000.}
 \item{save_dir}{Optional character path. If provided, saves each processed
 subset as an \code{.rds} file with its language/part name.}
 
+\item{tokenize_sentences}{Logical, if TRUE, split long texts into sentences
+during preprocessing and reassemble them after translation. Default = FALSE.}
+
 \item{...}{Additional parameters passed on to \code{clean_text()} during preprocessing.}
 }
 \value{
 A data.table with original data plus translation results merged in.
 }
 \description{
-Detects languages, reprocesses uncertain cases, splits the input
-into homogeneous language groups, and calls the Python translator
+Detects languages, reprocesses uncertain cases, optionally
+splits long texts into sentences, splits the input into homogeneous
+language groups, and calls the Python translator
 (\code{easynmt_translate()}) on each group.
 }

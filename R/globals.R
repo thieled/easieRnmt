@@ -14,6 +14,11 @@ utils::globalVariables(c(".I",
                          "tl_datetime",
                          "tl_model",
                          "translation",
-                         "return_string"
+                         "return_string",
+                         "n_sen",
+                         "..meta_cols",
+                         "orig_row_id",
+                         "tl_error",
+                         "id"
                          )
 )
