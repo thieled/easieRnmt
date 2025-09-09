@@ -3,5 +3,9 @@ utils::globalVariables(c(".I",
                          "row_id",
                          "text",
                          "lang",
-                         "lang_prob")
+                         "lang_prob",
+                         "lang_guess",
+                         "text_clean",
+                         "text_orig",
+                         "..cols_exist")
 )

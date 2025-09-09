@@ -13,7 +13,10 @@ BugReports: https://github.com/thieled/easieRnmt/issues
 Imports: 
     cli,
     data.table,
+    emoji,
     fastText,
-    reticulate
+    reticulate,
+    stringi,
+    stringr
 Suggests: 
     httr

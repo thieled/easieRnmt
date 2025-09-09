@@ -1,50 +1,224 @@
-#' @title Detect Languages with fastText
+#' @title Clean and Normalize Text for Language Detection and Translation
 #'
-#' @description Identifies the language of each text in a vector or data.frame using fastText's
-#' pretrained language identification model. Cleans problematic inputs (line breaks, control chars, invalid bytes).
-#' Returns a data.table with row ids, input text, detected language, and confidence.
+#' @description Cleans and normalizes raw text data in preparation for language
+#' detection and machine translation. Handles emoji replacement, removal of
+#' unsupported characters, trimming, squishing whitespace, and limiting text
+#' length. Returns either a standardized data.table or a character vector.
 #'
-#' @param x Character vector or data.frame containing texts to identify.
-#' @param text_col Character, name of the text column if \code{x} is a data.frame. Ignored if \code{x} is a vector.
-#' @param id_col Character, optional column in data.frame with unique ids. If NULL, sequential row ids are used.
-#' @param model_path Character, path to the fastText lid.176.bin model. Defaults to ~/.cache/easieRnmt/lid.176.bin.
-#' @param prob_threshold Numeric, threshold below which the detected language is replaced by "und". Default = 0.25.
-#' @param und_label Character, label for undefined language. Default = "und".
-#' @param threads Integer, number of threads for fastText. Default = parallel::detectCores().
-#' @param verbose Logical, whether to print progress messages.
+#' @param x Character vector or data.frame containing texts to clean.
+#' @param text_col Character, name of the text column if \code{x} is a data.frame.
+#' Ignored if \code{x} is a character vector. Default = "text".
+#' @param id_col Character, optional column name in the input data.frame to
+#' preserve as an identifier. Default = NULL.
+#' @param lang_guess_col Character, optional column name in the input data.frame
+#' to preserve as a column named \code{lang_guess}. Default = NULL.
+#' @param replace_emojis Logical, whether to replace emojis with placeholder names.
+#' Default = TRUE.
+#' @param replace_alphaless Logical, whether to replace strings that contain no
+#' alphabetic characters with empty strings. Default = TRUE.
+#' @param max_char Integer, maximum number of characters per text. Texts longer
+#' than this are truncated. Default = 5000.
+#' @param return_string Logical, if TRUE, return only the cleaned character vector
+#' (\code{text_clean}) instead of a full data.table. Default = FALSE.
+#' @param verbose Logical, whether to print progress messages. Default = TRUE.
 #'
-#' @return A data.table with columns: \code{row_id}, \code{text}, \code{lang}, \code{lang_prob},
-#' and optionally the user-provided id column.
+#' @details
+#' The cleaning pipeline performs the following steps:
+#' \enumerate{
+#'   \item Convert input to UTF-8.
+#'   \item Replace \code{NA} with empty strings.
+#'   \item Optionally replace emojis with placeholder names if
+#'   \code{replace_emojis = TRUE}.
+#'   \item Remove all characters except letters, numbers, punctuation, and
+#'   whitespace.
+#'   \item Normalize encoding to UTF-8 and substitute invalid bytes.
+#'   \item Truncate texts longer than \code{max_char}.
+#'   \item Optionally remove texts without alphabetic content if
+#'   \code{replace_alphaless = TRUE}.
+#'   \item Collapse multiple spaces into a single space.
+#' }
+#'
+#' The returned data.table is restricted to the columns
+#' \code{row_id}, \code{id} (if present), \code{text_orig}, \code{text_clean},
+#' and \code{lang_guess} (if present), in this fixed order.
+#'
+#' @return Either:
+#' \itemize{
+#'   \item A data.table with columns:
+#'   \itemize{
+#'     \item \code{row_id}: Row index of the input.
+#'     \item \code{id}: User-provided identifier, if available.
+#'     \item \code{text_orig}: Original text before cleaning.
+#'     \item \code{text_clean}: Cleaned and normalized text.
+#'     \item \code{lang_guess}: Optional language guess column, if present.
+#'   }
+#'   \item Or a character vector of cleaned texts if \code{return_string = TRUE}.
+#' }
+#'
+#' @import data.table
 #' @export
-detect_languages_fasttext <- function(x,
-                                      text_col = "text",
-                                      id_col = NULL,
-                                      model_path = NULL,
-                                      prob_threshold = 0.25,
-                                      und_label = "und",
-                                      threads = parallel::detectCores(),
-                                      verbose = TRUE) {
-  if (!requireNamespace("fastText", quietly = TRUE)) stop("Package 'fastText' must be installed.")
-  if (!requireNamespace("data.table", quietly = TRUE)) stop("Package 'data.table' must be installed.")
+clean_text <- function(x,
+                       text_col = "text",
+                       id_col = NULL,
+                       lang_guess_col = NULL,
+                       replace_emojis = TRUE,
+                       replace_alphaless = TRUE,
+                       max_char = 5000,
+                       return_string = FALSE,
+                       verbose = TRUE) {
+
   vmessage <- function(...) if (verbose) message(...)
 
-  # Normalize input ---------------------------------------------------------
-  dt <- if (is.character(x)) {
-    data.table::data.table(row_id = seq_along(x), text = x)
+  if (is.character(x)) {
+    dt <- data.table::data.table(row_id = seq_along(x), text_orig = x)
   } else if (is.data.frame(x)) {
     if (!text_col %in% names(x)) stop("text_col not found in data.frame")
-    out <- data.table::as.data.table(x)
-    out[, row_id := .I]
-    data.table::setnames(out, text_col, "text")
-    if (!is.null(id_col) && id_col %in% names(out)) {
-      data.table::setnames(out, id_col, "id")
+    dt <- data.table::as.data.table(x)
+    dt[, row_id := .I]
+    data.table::setnames(dt, text_col, "text_orig")
+    if (!is.null(id_col) && id_col %in% names(dt)) {
+      data.table::setnames(dt, id_col, "id")
     }
-    out
+    if (!is.null(lang_guess_col) && lang_guess_col %in% names(dt)) {
+      data.table::setnames(dt, lang_guess_col, "lang_guess")
+    }
   } else {
     stop("x must be a character vector or data.frame")
   }
 
-  # Model path --------------------------------------------------------------
+  dt[, text_clean := enc2utf8(text_orig)]
+  dt[is.na(text_clean), text_clean := ""]
+  if(replace_emojis)  dt[, text_clean := replace_emoji_with_name(text_clean)]
+
+  # keep only letters, numbers, punctuation, whitespace
+  dt[, text_clean := stringi::stri_replace_all_regex(text_clean, "[^\\p{L}\\p{N}\\p{P}\\p{Zs}]", " ")]
+
+  dt[, text_clean := iconv(text_clean, from = "", to = "UTF-8", sub = " ")]
+  dt[nchar(text_clean) > max_char, text_clean := substr(text_clean, 1, max_char)]
+  if(replace_alphaless) dt[!grepl("[[:alpha:]]", text_clean), text_clean := ""]
+  dt[, text_clean := stringr::str_squish(text_clean)]
+
+  # Ensure column order: row_id, id?, text_orig, text_clean, lang_guess?
+  cols_order <- c("row_id", "id", "text_orig", "text_clean", "lang_guess")
+  cols_exist <- intersect(cols_order, names(dt))
+  dt <- dt[, ..cols_exist]
+  data.table::setcolorder(dt, cols_exist)
+
+  if(return_string){
+    return(dt$text_clean)
+  }else{
+    return(dt[])
+  }
+
+
+}
+
+
+
+
+#' @title Replace Emojis with Names
+#'
+#' @description Replaces all emojis in a character vector with their textual names (in :name: style).
+#'
+#' @param text_vec Character vector of texts.
+#'
+#' @return Character vector with emojis replaced by names.
+#' @export
+replace_emoji_with_name <- function(text_vec) {
+  if (!requireNamespace("emoji", quietly = TRUE)) {
+    stop("Package 'emoji' is required for this function. Please install it.")
+  }
+  if (!requireNamespace("stringi", quietly = TRUE)) {
+    stop("Package 'stringi' is required for this function. Please install it.")
+  }
+
+  emoji_vec <- emoji::emoji_name
+  emoji_vec <- emoji_vec[grepl("[[:alpha:]]", names(emoji_vec))]
+
+  # emoji → :name: mapping
+  replacement_map <- stats::setNames(paste0(" [:", names(emoji_vec), ":] "), unname(emoji_vec))
+  emoji_chars <- names(replacement_map)
+
+  # Filter emojis that actually occur in text_vec (to avoid massive unnecessary replace)
+  present_idx <- stringi::stri_detect_fixed(
+    rep(paste(text_vec, collapse = " "), length(emoji_chars)),
+    emoji_chars
+  )
+  emoji_chars <- emoji_chars[present_idx]
+  replacements <- unname(replacement_map[emoji_chars])
+
+  if (length(emoji_chars) == 0L) {
+    return(text_vec)
+  }
+
+  # Vectorized replacement: replace all present emojis in one sweep
+  text_vec <- stringi::stri_replace_all_fixed(
+    str = text_vec,
+    pattern = emoji_chars,
+    replacement = replacements,
+    vectorize_all = FALSE
+  )
+
+  text_vec
+}
+
+
+
+
+
+#' @title Detect Languages with fastText
+#'
+#' @description Identifies the language of each text in a character vector or data.frame
+#' using fastText's pretrained language identification model. Calls \code{clean_text()}
+#' internally to normalize the text before prediction. Returns a standardized data.table.
+#'
+#' @param x Character vector or data.frame containing texts to identify.
+#' @param text_col Character, name of the text column if \code{x} is a data.frame.
+#' Ignored if \code{x} is a vector. Default = "text".
+#' @param id_col Character, optional column name in the input data.frame to preserve
+#' as an identifier. Default = NULL.
+#' @param lang_guess_col Character, optional column in the input data.frame containing
+#' user-specified language guesses. If present, these are used instead of \code{und_label}.
+#' Default = NULL.
+#' @param model_path Character, path to the fastText \code{lid.176.bin} model.
+#' Defaults to \code{~/.cache/easieRnmt/lid.176.bin}.
+#' @param prob_threshold Numeric, threshold below which the detected language is replaced
+#' by "und" (or by the user-provided \code{lang_guess}). Default = 0.25.
+#' @param und_label Character, label for undefined language if confidence is below
+#' \code{prob_threshold} and no \code{lang_guess} column is provided. Default = "und".
+#' @param max_char Integer, maximum number of characters per text after cleaning.
+#' Texts longer than this are truncated. Default = 5000.
+#' @param threads Integer, number of threads for fastText. Default = parallel::detectCores().
+#' @param verbose Logical, whether to print progress messages. Default = TRUE.
+#'
+#' @return A data.table with standardized columns: \code{row_id}, optional \code{id},
+#' \code{text_orig}, \code{text_clean}, \code{lang_guess}.
+#' @import data.table
+#' @export
+detect_languages <- function(x,
+                             text_col = "text",
+                             id_col = NULL,
+                             lang_guess_col = NULL,
+                             model_path = NULL,
+                             prob_threshold = 0.25,
+                             und_label = "und",
+                             max_char = 5000,
+                             threads = parallel::detectCores(),
+                             verbose = TRUE) {
+  if (!requireNamespace("fastText", quietly = TRUE)) stop("Package 'fastText' must be installed.")
+  vmessage <- function(...) if (verbose) message(...)
+
+  # Clean and standardize input
+  dt <- clean_text(
+    x = x,
+    text_col = text_col,
+    id_col = id_col,
+    lang_guess_col = lang_guess_col,
+    max_char = max_char,
+    verbose = verbose
+  )
+
+  # Resolve fastText model path
   if (is.null(model_path)) {
     home <- path.expand("~")
     cache_dir <- file.path(home, ".cache", "easieRnmt")
@@ -60,21 +234,12 @@ detect_languages_fasttext <- function(x,
     )
   }
 
-  # Clean text --------------------------------------------------------------
-  dt[, text := enc2utf8(text)]
-  dt[is.na(text), text := ""]
-  dt[, text := trimws(text)]
-  dt[, text := gsub("[\r\n]+", " ", text)]
-  dt[, text := gsub("[[:cntrl:]]", " ", text)]
-  dt[, text := iconv(text, from = "", to = "UTF-8", sub = " ")]
-  dt[nchar(text) > 5000, text := substr(text, 1, 5000)]
-  dt[!grepl("[[:alpha:]]", text), text := ""]
+  # Prepare input for fastText
+  empty_idx <- which(dt$text_clean == "")
+  texts_for_ft <- dt$text_clean
+  texts_for_ft[empty_idx] <- " "
 
-  empty_idx <- which(dt$text == "")
-  texts_for_ft <- dt$text
-  texts_for_ft[empty_idx] <- " "  # placeholder for fastText
-
-  # Run fastText ------------------------------------------------------------
+  # Run fastText
   vmessage("Running fastText language detection...")
   ft_res <- tryCatch(
     fastText::language_identification(
@@ -82,9 +247,7 @@ detect_languages_fasttext <- function(x,
       pre_trained_language_model_path = model_path,
       threads = threads
     ),
-    error = function(e) {
-      stop("fastText failed: ", conditionMessage(e))
-    }
+    error = function(e) stop("fastText failed: ", conditionMessage(e))
   )
 
   if (nrow(ft_res) != nrow(dt)) {
@@ -92,19 +255,28 @@ detect_languages_fasttext <- function(x,
          " inputs. Likely cause: unhandled special characters.")
   }
 
-  # Merge results -----------------------------------------------------------
+  # Attach predictions
   dt[, `:=`(
     lang = ft_res$iso_lang_1,
     lang_prob = ft_res$prob_1
   )]
 
-  # Force "und" for empty inputs
+  # Low-confidence handling
   if (length(empty_idx) > 0) {
     dt[empty_idx, `:=`(lang = und_label, lang_prob = 0)]
   }
-
-  # Apply threshold
   dt[lang_prob < prob_threshold, lang := und_label]
+
+  # If user provided a lang_guess column, prefer it over und_label
+  if ("lang_guess" %in% names(dt)) {
+    dt[lang == und_label & !is.na(lang_guess) & lang_guess != "", lang := lang_guess]
+  }
+
+  # Ensure standardized schema, including detection results
+  cols_order <- c("row_id", "id", "text_orig", "text_clean", "lang_guess", "lang", "lang_prob")
+  cols_exist <- intersect(cols_order, names(dt))
+  dt <- dt[, ..cols_exist]
+  data.table::setcolorder(dt, cols_exist)
 
   return(dt[])
 }
