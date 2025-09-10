@@ -152,7 +152,13 @@ translate <- function(
                         text_clean  = paste(text_clean, collapse = " "),
                         translation = paste(translation, collapse = " ")
                       )
-                      if ("lang" %in% names(.SD))        res$lang        <- lang[1]
+                      if ("lang" %in% names(.SD)) {
+                        # choose most frequent lang (first in case of tie)
+                        res$lang <- names(sort(table(lang), decreasing = TRUE))[1]
+                      }
+                      if ("lang_prob" %in% names(.SD)) {
+                        res$lang_prob <- mean(lang_prob, na.rm = TRUE)
+                      }
                       if ("lang_target" %in% names(.SD)) res$lang_target <- lang_target[1]
                       if ("tl_error" %in% names(.SD))    res$tl_error    <- tl_error[1]
                       if ("tl_datetime" %in% names(.SD)) res$tl_datetime <- tl_datetime[1]
@@ -174,6 +180,19 @@ translate <- function(
   } else {
     data.table::setorder(out, row_id)
   }
+
+  # Set column order
+  desired_cols <- c(
+    "row_id", "id", "text_orig", "text_clean",
+    "lang", "lang_prob", "lang_guess", "lang_target",
+    "translation", "tl_error", "tl_datetime", "tl_model"
+  )
+
+  available_cols <- intersect(desired_cols, names(out))
+  other_cols     <- setdiff(names(out), desired_cols)
+
+  data.table::setcolorder(out, c(available_cols, other_cols))
+
 
   if (return_string) {
     return(out$translation)

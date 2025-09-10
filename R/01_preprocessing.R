@@ -186,6 +186,8 @@ clean_text <- function(x,
 #' \code{prob_threshold} and no \code{lang_guess} column is provided. Default = "und".
 #' @param max_char Integer, maximum number of characters per text after cleaning.
 #' Texts longer than this are truncated. Default = 5000.
+#' @param tokenize_sentences Logical, whether to split texts with more than
+#' 3 sentences into individual sentences. Default = FALSE.
 #' @param threads Integer, number of threads for fastText. Default = parallel::detectCores().
 #' @param verbose Logical, whether to print progress messages. Default = TRUE.
 #' @param ... Additional parameters passed on to \code{clean_text}.
@@ -202,13 +204,14 @@ detect_languages <- function(x,
                              prob_threshold = 0.25,
                              und_label = "und",
                              max_char = 5000,
+                             tokenize_sentences = FALSE,
                              threads = parallel::detectCores(),
                              verbose = TRUE,
                              ...) {
   if (!requireNamespace("fastText", quietly = TRUE)) stop("Package 'fastText' must be installed.")
   vmessage <- function(...) if (verbose) message(...)
 
-  # Clean and standardize input
+  # Step 1: Clean and standardize input
   dt <- clean_text(
     x = x,
     text_col = text_col,
@@ -218,6 +221,55 @@ detect_languages <- function(x,
     verbose = verbose,
     ...
   )
+
+  # Step 2b: sentence tokenization
+  if (tokenize_sentences) {
+    vmessage("Tokenizing long texts into sentences...")
+
+    # Count sentences
+    dt[, n_sen := tokenizers::count_sentences(text_clean)]
+
+    # Split rows with >3 sentences
+    dt_long <- dt[n_sen > 3]
+    dt_short <- dt[n_sen <= 3]
+
+    if (nrow(dt_long) > 0) {
+      tokenized_list <- tokenizers::tokenize_sentences(dt_long$text_clean)
+
+      # Expand into data.table
+      tokenized_dt <- data.table::rbindlist(
+        lapply(seq_along(tokenized_list), function(i) {
+          sents <- unlist(tokenized_list[[i]])
+          data.table::data.table(
+            row_id = paste0(dt_long$row_id[i], "_", seq_along(sents)),
+            orig_row_id = dt_long$row_id[i],
+            text_clean = sents
+          )
+        }),
+        use.names = TRUE, fill = TRUE
+      )
+
+      # Merge metadata back (everything except text_clean/n_sen)
+      meta_cols <- setdiff(names(dt_long), c("text_clean", "n_sen"))
+      tokenized_dt <- merge(
+        tokenized_dt,
+        dt_long[, ..meta_cols],
+        by.x = "orig_row_id", by.y = "row_id",
+        all.x = TRUE
+      )
+
+      # Drop helper
+      tokenized_dt[, orig_row_id := NULL]
+      data.table::setnames(tokenized_dt, "row_id", "sen_row_id")
+      data.table::setnames(tokenized_dt, "sen_row_id", "row_id")
+
+      # Combine back
+      dt <- data.table::rbindlist(list(dt_short, tokenized_dt), use.names = TRUE, fill = TRUE)
+    }
+
+    dt[, n_sen := NULL] # cleanup
+  }
+
 
   # Resolve fastText model path
   if (is.null(model_path)) {
@@ -312,7 +364,7 @@ detect_languages <- function(x,
 #' Chunked tables are suffixed with \code{"_pt1"}, \code{"_pt2"}, etc.
 #' Default = NULL (no further splitting).
 #' @param tokenize_sentences Logical, whether to split texts with more than
-#' 3 sentences into individual sentences. Default = FALSE.
+#' 3 sentences into individual sentences. Default = TRUE.
 #' @param threads Integer, number of threads for fastText. Default =
 #' \code{parallel::detectCores()}.
 #' @param verbose Logical, whether to print progress messages. Default = TRUE.
@@ -333,7 +385,7 @@ preprocess <- function(x,
                        und_label = "und",
                        max_char = 5000,
                        chunk_size = NULL,
-                       tokenize_sentences = FALSE,
+                       tokenize_sentences = TRUE,
                        threads = parallel::detectCores(),
                        verbose = TRUE,
                        ...) {
@@ -353,6 +405,7 @@ preprocess <- function(x,
     max_char = max_char,
     threads = threads,
     verbose = verbose,
+    tokenize_sentences = tokenize_sentences,
     ...
   )
 
@@ -378,54 +431,6 @@ preprocess <- function(x,
     } else {
       dt[idx_und, lang := targ_lang]
     }
-  }
-
-  # Step 2b: sentence tokenization
-  if (tokenize_sentences) {
-    vmessage("Tokenizing long texts into sentences...")
-
-    # Count sentences
-    dt[, n_sen := tokenizers::count_sentences(text_clean)]
-
-    # Split rows with >3 sentences
-    dt_long <- dt[n_sen > 3]
-    dt_short <- dt[n_sen <= 3]
-
-    if (nrow(dt_long) > 0) {
-      tokenized_list <- tokenizers::tokenize_sentences(dt_long$text_clean)
-
-      # Expand into data.table
-      tokenized_dt <- data.table::rbindlist(
-        lapply(seq_along(tokenized_list), function(i) {
-          sents <- unlist(tokenized_list[[i]])
-          data.table::data.table(
-            row_id = paste0(dt_long$row_id[i], "_", seq_along(sents)),
-            orig_row_id = dt_long$row_id[i],
-            text_clean = sents
-          )
-        }),
-        use.names = TRUE, fill = TRUE
-      )
-
-      # Merge metadata back (everything except text_clean/n_sen)
-      meta_cols <- setdiff(names(dt_long), c("text_clean", "n_sen"))
-      tokenized_dt <- merge(
-        tokenized_dt,
-        dt_long[, ..meta_cols],
-        by.x = "orig_row_id", by.y = "row_id",
-        all.x = TRUE
-      )
-
-      # Drop helper
-      tokenized_dt[, orig_row_id := NULL]
-      data.table::setnames(tokenized_dt, "row_id", "sen_row_id")
-      data.table::setnames(tokenized_dt, "sen_row_id", "row_id")
-
-      # Combine back
-      dt <- data.table::rbindlist(list(dt_short, tokenized_dt), use.names = TRUE, fill = TRUE)
-    }
-
-    dt[, n_sen := NULL] # cleanup
   }
 
   # Step 3: split into homogeneous groups
