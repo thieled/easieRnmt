@@ -1,0 +1,84 @@
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+# easieRnmt <img src="man/figures/logo.png" align="right" height="120" alt="" />
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of easieRnmt is to provide a user-friendly R wrapper around the
+[EasyNMT](https://github.com/UKPLab/EasyNMT) python library, which
+provides “Easy to use, state-of-the-art Neural Machine Translation for
+100+ languages” - on a local machine.
+
+## Installation
+
+You can install the development version of easieRnmt from
+[GitHub](https://github.com/) with:
+
+``` r
+# install.packages("pak")
+pak::pak("thieled/easieRnmt")
+```
+
+The package runs EasyNMT from a conda environment ‘r-easynmt’. This
+function will install and set up everything for you. It also
+automatically installs the correct pytorch version - supporting CUDA
+(Nvidia GPU) integration if this is available on your machine:
+
+``` r
+easieRnmt::install_easynmt()
+```
+
+## Example
+
+The package easieRnmt completely takes care of preprocessing your text
+data - from sentence tokenization, careful cleaning, emoji-replacement,
+language detection, and handling ambiguous cases.
+
+To avoid compatibility conflicts with the fasttext python library in
+Windows, it uses the fastText R package for language detection.
+
+It supports efficient batch-processing, and takes care that only
+language-homogeneous batches are processed – as the models assume that
+languages is consistent within batches.
+
+Finally, it glues all translated sentences back together to the input
+format, sorts the translations as the input, and returns either a
+data.table (including the cleaned text and additional information) or
+the string only.
+
+``` r
+
+# Minimal example
+sentences = c('Dies ist ein Satz in Deutsch. Und noch ein Satz.',   # This is a German sentence
+              'Esta es una oración en español.', # This is a Spanish sentence
+              "هذه جملة باللغة العربية!!!")       # This is an Arabic sentence
+
+library(easieRnmt)
+
+# Initialize easieRnmt
+easieRnmt::initialize_easynmt()
+
+# Translate
+res <- easieRnmt::translate(sentences,
+                     model = 'opus-mt',
+                     targ_lang = "en",
+                     return_string = T)
+# Print results
+print(res)
+
+### Output: 
+
+# Running fastText language detection...
+#   |                                                  | 0 % ~calculating  Processing language: ar
+# Translating batches: 100%|██████████| 1/1 [00:00<00:00,  5.09batch/s]
+#   |+++++++++++++++++                                 | 33% ~00s          Processing language: de
+# Translating batches: 100%|██████████| 1/1 [00:00<00:00, 13.80batch/s]
+#   |++++++++++++++++++++++++++++++++++                | 67% ~00s          Processing language: es
+# Translating batches: 100%|██████████| 1/1 [00:00<00:00, 19.86batch/s]
+#   |++++++++++++++++++++++++++++++++++++++++++++++++++| 100% elapsed=00s  
+# > print(res)
+# [1] "This is a sentence in German. And another sentence." "This is a sentence in Spanish."                     
+# [3] "That's a sentence in Arabic!" 
+```
