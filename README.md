@@ -30,6 +30,11 @@ automatically installs the correct pytorch version - supporting CUDA
 easieRnmt::install_easynmt()
 ```
 
+Note that the package requires a C++ compiler (e.g. g++). If you are a
+Windows user, please make sure to install a RTools version that matches
+your R version, from
+[here](https://cran.r-project.org/bin/windows/Rtools/).
+
 ## Example
 
 The package easieRnmt completely takes care of preprocessing your text

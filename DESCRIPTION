@@ -1,6 +1,6 @@
 Package: easieRnmt
 Title: EasyNMT for R
-Version: 0.0.1.0002
+Version: 0.0.1.0003
 Authors@R: 
     person("Daniel", "Thiele", , "daniel.thiele@fu-berlin.de", role = c("aut", "cre"))
 Description: R wrapper around the EasyNMT python library, providing "Easy to use, state-of-the-art Neural Machine Translation for 100+ languages" locally.
@@ -10,6 +10,8 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 URL: https://github.com/thieled/easieRnmt
 BugReports: https://github.com/thieled/easieRnmt/issues
+SystemRequirements: A C++11 capable compiler (g++ >= 4.7.2, clang >= 3.3).
+  On Windows, Rtools (latest version) must be installed and on PATH.
 Imports: 
     cli,
     data.table,

@@ -410,6 +410,11 @@ install_easynmt <- function(
     stop("Please install reticulate first.")
   }
 
+  # First check system requirements -- Cpp compiler needed for fastText package
+  if (!check_system_requirements()) {
+    stop("System requirements not met. Please install the required compiler before continuing.")
+  }
+
   # 1. Install or activate conda env (installs miniconda if not present)
   install_conda_env(
     python_version = python_version,
@@ -619,5 +624,57 @@ initialize_easynmt <- function(python_version = "3.11",
   }
 
   options("easynmt_initialized" = TRUE)
+}
+
+
+
+
+#' @title Check for System Requirements
+#'
+#' @description
+#' Verifies whether a suitable C++11 compiler is available on the system.
+#' This is required because \pkg{easieRnmt} depends on the \pkg{fastText} library,
+#' which requires a compiler with C++11 support.
+#'
+#' @details
+#' - On **Windows**, this function checks whether \code{g++} is available on the PATH.
+#'   If not, it suggests installing the appropriate version of Rtools for the
+#'   running version of R.
+#' - On **Linux** and **macOS**, it checks for the presence of either
+#'   \code{g++} (>= 4.7.2) or \code{clang} (>= 3.3).
+#'
+#' The function prints an informative message if no suitable compiler
+#' is found.
+#'
+#' @return
+#' A logical scalar:
+#' \itemize{
+#'   \item \code{TRUE} if a suitable compiler was found.
+#'   \item \code{FALSE} otherwise (with a message explaining what to install).
+#' }
+#'
+#' @export
+#'
+check_system_requirements <- function() {
+  os <- .Platform$OS.type
+  if (os == "windows") {
+    if (Sys.which("g++") == "") {
+      r_version <- getRversion()
+      message(
+        "A C++11 compiler is required but missing.\n",
+        "Please install a RTools version that matches your R version ", r_version, " from:\n",
+        "https://cran.r-project.org/bin/windows/Rtools/"
+      )
+      return(FALSE)
+    }
+  } else {
+    gpp   <- Sys.which("g++")
+    clang <- Sys.which("clang")
+    if (gpp == "" && clang == "") {
+      message("Missing C++11 compiler. Install g++ >= 4.7.2 or clang >= 3.3.")
+      return(FALSE)
+    }
+  }
+  TRUE
 }
 

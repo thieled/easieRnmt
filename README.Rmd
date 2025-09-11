@@ -37,6 +37,9 @@ version - supporting CUDA (Nvidia GPU) integration if this is available on your 
 easieRnmt::install_easynmt()
 ```
 
+Note that the package requires a C++ compiler (e.g. g++). If you are a Windows user,
+please make sure to install a RTools version that matches your R version, from [here](https://cran.r-project.org/bin/windows/Rtools/).
+
 ## Example
 
 The package easieRnmt completely takes care of preprocessing your text data - from sentence tokenization, careful cleaning, emoji-replacement, language detection, and handling ambiguous cases. 
