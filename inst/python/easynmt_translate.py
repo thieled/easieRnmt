@@ -13,9 +13,9 @@ def set_seed(seed: int = 42, deterministic: bool = True):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
-    torch.backends.cudnn.deterministic = deterministic
-    torch.backends.cudnn.benchmark = not deterministic
+        # cudnn backend only exists if CUDA is available
+        torch.backends.cudnn.deterministic = deterministic
+        torch.backends.cudnn.benchmark = not deterministic
 
 
 # lazy model cache
@@ -94,8 +94,10 @@ def easynmt_translate(
             translations.extend([None] * len(batch_texts))
             errors.extend([str(e)] * len(batch_texts))
 
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+        # cleanup only if CUDA is available
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
 
     out = pd.DataFrame({
         "row_id": ids,

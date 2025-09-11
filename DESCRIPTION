@@ -1,6 +1,6 @@
 Package: easieRnmt
 Title: EasyNMT for R
-Version: 0.0.1.0001
+Version: 0.0.1.0002
 Authors@R: 
     person("Daniel", "Thiele", , "daniel.thiele@fu-berlin.de", role = c("aut", "cre"))
 Description: R wrapper around the EasyNMT python library, providing "Easy to use, state-of-the-art Neural Machine Translation for 100+ languages" locally.
