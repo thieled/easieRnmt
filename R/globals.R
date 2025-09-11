@@ -19,6 +19,8 @@ utils::globalVariables(c(".I",
                          "..meta_cols",
                          "orig_row_id",
                          "tl_error",
-                         "id"
+                         "id",
+                         "tokenize_after",
+                         "tokenize_before"
                          )
 )

@@ -336,7 +336,8 @@ install_fasttext <- function(
 #' @param ... Further arguments passed to reticulate::py_install().
 #' @export
 install_deps <- function(
-    packages = c("pytz", "python-dateutil"),
+    packages = c("pytz",
+                 "python-dateutil"),
     envname = NULL,
     method = "auto",
     pip = TRUE,
@@ -452,7 +453,7 @@ except Exception:
   if (fasttext_ok) {
     message("FastText detected. Installing EasyNMT with dependencies...")
     cmd <- sprintf(
-      '"%s" -m pip install easynmt nltk numpy protobuf sentencepiece torch tqdm transformers langdetect sacremoses',
+      '"%s" -m pip install easynmt nltk numpy pandas protobuf sentencepiece==0.2.0 torch tqdm transformers langdetect sacremoses',
       py_bin
     )
     system(cmd)
@@ -469,7 +470,6 @@ except Exception:
 
   # 6. Install additional dependencies via install_deps()
   install_deps(
-    packages = c("pytz", "python-dateutil"),  # extend this vector later
     envname  = conda_env_name,
     method   = "conda",
     pip      = TRUE

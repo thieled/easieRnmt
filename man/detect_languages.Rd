@@ -13,6 +13,7 @@ detect_languages(
   prob_threshold = 0.25,
   und_label = "und",
   max_char = 5000,
+  tokenize_sentences = FALSE,
   threads = parallel::detectCores(),
   verbose = TRUE,
   ...
@@ -42,6 +43,9 @@ by "und" (or by the user-provided \code{lang_guess}). Default = 0.25.}
 
 \item{max_char}{Integer, maximum number of characters per text after cleaning.
 Texts longer than this are truncated. Default = 5000.}
+
+\item{tokenize_sentences}{Logical, whether to split texts with more than
+3 sentences into individual sentences. Default = FALSE.}
 
 \item{threads}{Integer, number of threads for fastText. Default = parallel::detectCores().}
 

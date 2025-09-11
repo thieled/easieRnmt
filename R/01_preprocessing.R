@@ -365,6 +365,8 @@ detect_languages <- function(x,
 #' Default = NULL (no further splitting).
 #' @param tokenize_sentences Logical, whether to split texts with more than
 #' 3 sentences into individual sentences. Default = TRUE.
+#' @param tokenize_when Character, determines when to tokenize into sentences.
+#' Options are \code{"before"} or \code{"after"} language detection.
 #' @param threads Integer, number of threads for fastText. Default =
 #' \code{parallel::detectCores()}.
 #' @param verbose Logical, whether to print progress messages. Default = TRUE.
@@ -386,12 +388,19 @@ preprocess <- function(x,
                        max_char = 5000,
                        chunk_size = NULL,
                        tokenize_sentences = TRUE,
+                       tokenize_when = "after",
                        threads = parallel::detectCores(),
                        verbose = TRUE,
                        ...) {
   if (missing(targ_lang)) stop("'targ_lang' must be specified")
 
   vmessage <- function(...) if (verbose) message(...)
+
+  # Handle tokenize when
+  tokenize_before <- tokenize_sentences
+  tokenize_after <- tokenize_sentences
+  if(tokenize_when == "after") tokenize_before <- FALSE
+  if(tokenize_when == "before") tokenize_after <- FALSE
 
   # Step 1: run language detection
   dt <- detect_languages(
@@ -405,7 +414,7 @@ preprocess <- function(x,
     max_char = max_char,
     threads = threads,
     verbose = verbose,
-    tokenize_sentences = tokenize_sentences,
+    tokenize_sentences = tokenize_before,
     ...
   )
 
@@ -432,6 +441,55 @@ preprocess <- function(x,
       dt[idx_und, lang := targ_lang]
     }
   }
+
+  # Step 2b: sentence tokenization
+  if (tokenize_after) {
+    vmessage("Tokenizing long texts into sentences...")
+
+    # Count sentences
+    dt[, n_sen := tokenizers::count_sentences(text_clean)]
+
+    # Split rows with >3 sentences
+    dt_long <- dt[n_sen > 3]
+    dt_short <- dt[n_sen <= 3]
+
+    if (nrow(dt_long) > 0) {
+      tokenized_list <- tokenizers::tokenize_sentences(dt_long$text_clean)
+
+      # Expand into data.table
+      tokenized_dt <- data.table::rbindlist(
+        lapply(seq_along(tokenized_list), function(i) {
+          sents <- unlist(tokenized_list[[i]])
+          data.table::data.table(
+            row_id = paste0(dt_long$row_id[i], "_", seq_along(sents)),
+            orig_row_id = dt_long$row_id[i],
+            text_clean = sents
+          )
+        }),
+        use.names = TRUE, fill = TRUE
+      )
+
+      # Merge metadata back (everything except text_clean/n_sen)
+      meta_cols <- setdiff(names(dt_long), c("text_clean", "n_sen"))
+      tokenized_dt <- merge(
+        tokenized_dt,
+        dt_long[, ..meta_cols],
+        by.x = "orig_row_id", by.y = "row_id",
+        all.x = TRUE
+      )
+
+      # Drop helper
+      tokenized_dt[, orig_row_id := NULL]
+      data.table::setnames(tokenized_dt, "row_id", "sen_row_id")
+      data.table::setnames(tokenized_dt, "sen_row_id", "row_id")
+
+      # Combine back
+      dt <- data.table::rbindlist(list(dt_short, tokenized_dt), use.names = TRUE, fill = TRUE)
+    }
+
+    dt[, n_sen := NULL] # cleanup
+  }
+
 
   # Step 3: split into homogeneous groups
   out <- split(dt, by = "lang", keep.by = TRUE, sorted = TRUE)

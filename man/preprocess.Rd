@@ -15,7 +15,8 @@ preprocess(
   und_label = "und",
   max_char = 5000,
   chunk_size = NULL,
-  tokenize_sentences = FALSE,
+  tokenize_sentences = TRUE,
+  tokenize_when = "after",
   threads = parallel::detectCores(),
   verbose = TRUE,
   ...
@@ -53,7 +54,10 @@ Chunked tables are suffixed with \code{"_pt1"}, \code{"_pt2"}, etc.
 Default = NULL (no further splitting).}
 
 \item{tokenize_sentences}{Logical, whether to split texts with more than
-3 sentences into individual sentences. Default = FALSE.}
+3 sentences into individual sentences. Default = TRUE.}
+
+\item{tokenize_when}{Character, determines when to tokenize into sentences.
+Options are \code{"before"} or \code{"after"} language detection.}
 
 \item{threads}{Integer, number of threads for fastText. Default =
 \code{parallel::detectCores()}.}
