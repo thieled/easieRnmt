@@ -21,6 +21,7 @@ utils::globalVariables(c(".I",
                          "tl_error",
                          "id",
                          "tokenize_after",
-                         "tokenize_before"
+                         "tokenize_before",
+                         "n_wor"
                          )
 )

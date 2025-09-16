@@ -145,6 +145,12 @@ clean_text <- function(x,
   dt[nchar(text_clean) > max_char, text_clean := substr(text_clean, 1, max_char)]
   if(replace_alphaless) dt[!grepl("[[:alpha:]]", text_clean), text_clean := ""]
   dt[, text_clean := textclean::replace_curly_quote(text_clean)]
+
+  # normalize numbers, collapse quotes, squish whitespace
+  dt[, text_clean := stringr::str_replace_all(text_clean, "(\\d)\\.(?=\\d)", "\\1 ")]
+  dt[, text_clean := stringr::str_replace_all(text_clean, "(\\d)\\.(?!\\d)", "\\1 ")]
+  dt[, text_clean := stringr::str_replace_all(text_clean, '\"{2,}', '"')]
+  dt[, text_clean := stringr::str_replace_all(text_clean, "'{2,}", "'")]
   dt[, text_clean := stringr::str_squish(text_clean)]
 
   # Ensure column order: row_id, id?, text_orig, text_clean, lang_guess?
@@ -226,12 +232,13 @@ detect_languages <- function(x,
   if (tokenize_sentences) {
     vmessage("Tokenizing long texts into sentences...")
 
-    # Count sentences
+    # Count sentences and words
     dt[, n_sen := tokenizers::count_sentences(text_clean)]
+    dt[, n_wor := tokenizers::count_words(text_clean)]
 
-    # Split rows with >3 sentences
-    dt_long <- dt[n_sen > 3]
-    dt_short <- dt[n_sen <= 3]
+    # Split into long and short datasets
+    dt_long <- dt[n_sen >= 2 & n_wor > 30]
+    dt_short <- dt[!row_id %in% dt_long$row_id]
 
     if (nrow(dt_long) > 0) {
       tokenized_list <- tokenizers::tokenize_sentences(dt_long$text_clean)
