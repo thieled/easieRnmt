@@ -15,7 +15,8 @@
 #' @param deterministic Logical, enforce deterministic cudnn ops (default TRUE).
 #' @param check_translation Logical, perform retry check (default FALSE).
 #' @param n_retries Integer, number of retries if check fails (default 3L).
-#' @param div_threshold Numeric, threshold for retry trigger (default 0.5).
+#' @param rep_factor Numeric, factor by which the translation may be more
+#'   repetitive than the input before triggering a retry (default 2.0).
 #' @param return_string Logical, if TRUE, return only the translated character vector. Default = FALSE.
 #' @param save_dir Optional character path. If provided, saves each processed
 #'   subset as an \code{.rds} file with its language/part name.
@@ -46,7 +47,7 @@ translate <- function(
     verbose = TRUE,
     check_translation = FALSE,
     n_retries = 3L,
-    div_threshold = 0.5,
+    rep_factor = 2.0,
     return_string = FALSE,
     save_dir = NULL,
     tokenize_sentences = FALSE,
@@ -97,7 +98,7 @@ translate <- function(
       verbose = verbose,
       check_translation = check_translation,
       n_retries = as.integer(n_retries),
-      div_threshold = div_threshold
+      rep_factor = rep_factor
     )
 
     res <- data.table::as.data.table(res)

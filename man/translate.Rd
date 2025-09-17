@@ -25,7 +25,7 @@ translate(
   verbose = TRUE,
   check_translation = FALSE,
   n_retries = 3L,
-  div_threshold = 0.5,
+  rep_factor = 2,
   return_string = FALSE,
   save_dir = NULL,
   tokenize_sentences = FALSE,
@@ -81,7 +81,8 @@ Texts longer than this are truncated. Default = 5000.}
 
 \item{n_retries}{Integer, number of retries if check fails (default 3L).}
 
-\item{div_threshold}{Numeric, threshold for retry trigger (default 0.5).}
+\item{rep_factor}{Numeric, factor by which the translation may be more
+repetitive than the input before triggering a retry (default 2.0).}
 
 \item{return_string}{Logical, if TRUE, return only the translated character vector. Default = FALSE.}
 

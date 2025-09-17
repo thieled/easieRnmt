@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
-
 # --- reproducibility setup ---
 def set_seed(seed: int = 42, deterministic: bool = True):
     random.seed(seed)
@@ -14,6 +13,7 @@ def set_seed(seed: int = 42, deterministic: bool = True):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+        # cudnn backend only exists if CUDA is available
         torch.backends.cudnn.deterministic = deterministic
         torch.backends.cudnn.benchmark = not deterministic
 
@@ -39,16 +39,11 @@ def easynmt_translate(
     verbose: bool = True,
     check_translation: bool = False,
     n_retries: int = 3,
-    rep_factor: float = 2.0
+    div_threshold: float = 0.5
 ):
     """
     Safe translation wrapper for EasyNMT.
-    Adds optional retry mechanism if translations look significantly
-    more repetitive than the source text.
-
-    Repetition ratio = len(tokens) / len(unique_tokens).
-    A retry is triggered if:
-        rep_ratio_trg > rep_ratio_src * rep_factor
+    Adds optional retry mechanism if translations look collapsed.
     """
 
     set_seed(seed=seed, deterministic=deterministic)
@@ -118,42 +113,39 @@ def easynmt_translate(
 
     # --- optional retry check ---
     if check_translation:
+        retry_rows = []
         for idx, row in out.iterrows():
-            # compute source repetition ratio
-            src_tokens = str(row["text"]).split()
-            rep_ratio_src = len(src_tokens) / max(len(set(src_tokens)), 1)
+            src_div = len(set(row["text"].split()))
+            trg_div = len(set(str(row["translation"]).split())) if row["translation"] else 0
 
-            if not row["translation"]:
-                rep_ratio_trg = float("inf")
-            else:
-                trg_tokens = str(row["translation"]).split()
-                rep_ratio_trg = len(trg_tokens) / max(len(set(trg_tokens)), 1)
-
-            # trigger retry if translation is much more repetitive than input
-            if rep_ratio_trg > rep_ratio_src * rep_factor:
+            if src_div > 0 and trg_div < src_div * div_threshold:
+                # retry loop
+                fixed = False
                 for r in range(1, n_retries + 1):
-                    set_seed(seed + r, deterministic=False)  # force new sampling
+                    set_seed(seed + r, deterministic=deterministic)
                     try:
                         new_translation = model_obj.translate(
                             [row["text"]],
                             source_lang=row["lang_source"],
                             target_lang=target_lang,
                             max_length=safe_max_len,
-                            beam_size=max(beam_size, 5),  # stronger beam on retry
+                            beam_size=beam_size,
                             perform_sentence_splitting=False,
                         )
                         if isinstance(new_translation, list):
                             new_translation = new_translation[0]
 
-                        new_tokens = new_translation.split()
-                        new_rep_ratio = len(new_tokens) / max(len(set(new_tokens)), 1)
-
-                        if new_rep_ratio <= rep_ratio_src * rep_factor:
-                            out.at[idx, "translation"] = new_translation
-                            out.at[idx, "error"] = f"Retry fixed at attempt {r}"
+                        new_trg_div = len(set(new_translation.split()))
+                        if new_trg_div >= src_div * div_threshold:
+                            row["translation"] = new_translation
+                            row["error"] = f"Retry No: {r}"
+                            fixed = True
                             break
                     except Exception as e:
-                        out.at[idx, "error"] = f"Retry {r} failed: {e}"
+                        row["error"] = f"Retry No: {r}, error: {e}"
+                retry_rows.append(row)
+        if retry_rows:
+            out = pd.concat([out.drop([r.name for r in retry_rows]), pd.DataFrame(retry_rows)], axis=0)
 
     # --- sort by row_id for stability ---
     out = out.sort_values("row_id").reset_index(drop=True)
