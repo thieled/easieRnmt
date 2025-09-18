@@ -11,12 +11,12 @@
 #' @param seed Integer, random seed (default 42).
 #' @param batch_size Integer, batch size for translation (default 20L).
 #' @param max_length_tl Integer, maximum token length (default 512L).
-#' @param beam_size Integer, beam size (default 1L).
+#' @param beam_size Integer, beam size for translation (default 1L).
 #' @param deterministic Logical, enforce deterministic cudnn ops (default TRUE).
 #' @param check_translation Logical, perform retry check (default FALSE).
 #' @param n_retries Integer, number of retries if check fails (default 3L).
-#' @param rep_factor Numeric, factor by which the translation may be more
-#'   repetitive than the input before triggering a retry (default 2.0).
+#' @param check_threshold Numeric, threshold for ratio of unique tokens
+#'   (target / source) below which retries are attempted (default 0.6).
 #' @param return_string Logical, if TRUE, return only the translated character vector. Default = FALSE.
 #' @param save_dir Optional character path. If provided, saves each processed
 #'   subset as an \code{.rds} file with its language/part name.
@@ -47,7 +47,7 @@ translate <- function(
     verbose = TRUE,
     check_translation = FALSE,
     n_retries = 3L,
-    rep_factor = 2.0,
+    check_threshold = 0.6,
     return_string = FALSE,
     save_dir = NULL,
     tokenize_sentences = FALSE,
@@ -98,7 +98,7 @@ translate <- function(
       verbose = verbose,
       check_translation = check_translation,
       n_retries = as.integer(n_retries),
-      rep_factor = rep_factor
+      check_threshold = check_threshold
     )
 
     res <- data.table::as.data.table(res)
@@ -154,7 +154,6 @@ translate <- function(
                         translation = paste(translation, collapse = " ")
                       )
                       if ("lang" %in% names(.SD)) {
-                        # choose most frequent lang (first in case of tie)
                         res$lang <- names(sort(table(lang), decreasing = TRUE))[1]
                       }
                       if ("lang_prob" %in% names(.SD)) {
@@ -193,7 +192,6 @@ translate <- function(
   other_cols     <- setdiff(names(out), desired_cols)
 
   data.table::setcolorder(out, c(available_cols, other_cols))
-
 
   if (return_string) {
     return(out$translation)

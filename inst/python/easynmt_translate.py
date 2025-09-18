@@ -39,16 +39,18 @@ def easynmt_translate(
     verbose: bool = True,
     check_translation: bool = False,
     n_retries: int = 3,
-    rep_factor: float = 2.0
+    check_threshold: float = 0.6
 ):
     """
     Safe translation wrapper for EasyNMT.
-    Adds optional retry mechanism if translations look significantly
-    more repetitive than the source text.
+    Adds optional retry mechanism based on unique token ratio.
 
-    Repetition ratio = len(tokens) / len(unique_tokens).
-    A retry is triggered if:
-        rep_ratio_trg > rep_ratio_src * rep_factor
+    Heuristic:
+        unique_tokens_ratio = n_unique_trg / n_unique_src
+    Retry is triggered if ratio < check_threshold.
+    Edge cases:
+        - If source has no tokens, ratio = Inf (never triggers).
+        - If target has no tokens, ratio = 0 (always triggers).
     """
 
     set_seed(seed=seed, deterministic=deterministic)
@@ -119,41 +121,47 @@ def easynmt_translate(
     # --- optional retry check ---
     if check_translation:
         for idx, row in out.iterrows():
-            # compute source repetition ratio
             src_tokens = str(row["text"]).split()
-            rep_ratio_src = len(src_tokens) / max(len(set(src_tokens)), 1)
+            trg_tokens = str(row["translation"]).split() if row["translation"] else []
 
-            if not row["translation"]:
-                rep_ratio_trg = float("inf")
+            n_unique_src = len(set(src_tokens))
+            n_unique_trg = len(set(trg_tokens))
+
+            if n_unique_src == 0:
+                unique_ratio = float("inf")
             else:
-                trg_tokens = str(row["translation"]).split()
-                rep_ratio_trg = len(trg_tokens) / max(len(set(trg_tokens)), 1)
+                unique_ratio = n_unique_trg / n_unique_src
 
-            # trigger retry if translation is much more repetitive than input
-            if rep_ratio_trg > rep_ratio_src * rep_factor:
-                for r in range(1, n_retries + 1):
-                    set_seed(seed + r, deterministic=False)  # force new sampling
-                    try:
-                        new_translation = model_obj.translate(
-                            [row["text"]],
-                            source_lang=row["lang_source"],
-                            target_lang=target_lang,
-                            max_length=safe_max_len,
-                            beam_size=max(beam_size, 5),  # stronger beam on retry
-                            perform_sentence_splitting=False,
-                        )
-                        if isinstance(new_translation, list):
-                            new_translation = new_translation[0]
+            retry_count = 0
+            while unique_ratio < check_threshold and retry_count < n_retries:
+                retry_count += 1
+                set_seed(seed + retry_count, deterministic=False)
+                try:
+                    new_translation = model_obj.translate(
+                        [row["text"]],
+                        source_lang=row["lang_source"],
+                        target_lang=target_lang,
+                        max_length=safe_max_len,
+                        beam_size=max(beam_size, 5),
+                        perform_sentence_splitting=False,
+                    )
+                    if isinstance(new_translation, list):
+                        new_translation = new_translation[0]
 
-                        new_tokens = new_translation.split()
-                        new_rep_ratio = len(new_tokens) / max(len(set(new_tokens)), 1)
+                    new_tokens = new_translation.split()
+                    new_unique_trg = len(set(new_tokens))
+                    unique_ratio = (
+                        float("inf")
+                        if n_unique_src == 0
+                        else new_unique_trg / n_unique_src
+                    )
 
-                        if new_rep_ratio <= rep_ratio_src * rep_factor:
-                            out.at[idx, "translation"] = new_translation
-                            out.at[idx, "error"] = f"Retry fixed at attempt {r}"
-                            break
-                    except Exception as e:
-                        out.at[idx, "error"] = f"Retry {r} failed: {e}"
+                    out.at[idx, "translation"] = new_translation
+                    out.at[idx, "error"] = f"Retry attempt {retry_count}"
+
+                except Exception as e:
+                    out.at[idx, "error"] = f"Retry {retry_count} failed: {e}"
+                    break
 
     # --- sort by row_id for stability ---
     out = out.sort_values("row_id").reset_index(drop=True)

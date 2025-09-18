@@ -25,7 +25,7 @@ translate(
   verbose = TRUE,
   check_translation = FALSE,
   n_retries = 3L,
-  rep_factor = 2,
+  check_threshold = 0.6,
   return_string = FALSE,
   save_dir = NULL,
   tokenize_sentences = FALSE,
@@ -71,7 +71,7 @@ Texts longer than this are truncated. Default = 5000.}
 
 \item{max_length_tl}{Integer, maximum token length (default 512L).}
 
-\item{beam_size}{Integer, beam size (default 1L).}
+\item{beam_size}{Integer, beam size for translation (default 1L).}
 
 \item{deterministic}{Logical, enforce deterministic cudnn ops (default TRUE).}
 
@@ -81,8 +81,8 @@ Texts longer than this are truncated. Default = 5000.}
 
 \item{n_retries}{Integer, number of retries if check fails (default 3L).}
 
-\item{rep_factor}{Numeric, factor by which the translation may be more
-repetitive than the input before triggering a retry (default 2.0).}
+\item{check_threshold}{Numeric, threshold for ratio of unique tokens
+(target / source) below which retries are attempted (default 0.6).}
 
 \item{return_string}{Logical, if TRUE, return only the translated character vector. Default = FALSE.}
 
