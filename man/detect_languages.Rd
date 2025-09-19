@@ -20,45 +20,45 @@ detect_languages(
 )
 }
 \arguments{
-\item{x}{Character vector or data.frame containing texts to identify.}
+\item{x}{Character vector or data.frame containing texts to clean.}
 
 \item{text_col}{Character, name of the text column if \code{x} is a data.frame.
-Ignored if \code{x} is a vector. Default = "text".}
+Ignored if \code{x} is a character vector. Default = "text".}
 
-\item{id_col}{Character, optional column name in the input data.frame to preserve
-as an identifier. Default = NULL.}
+\item{id_col}{Character, optional column name in the input data.frame to
+preserve as \code{id}. Default = NULL.}
 
-\item{lang_guess_col}{Character, optional column in the input data.frame containing
-user-specified language guesses. If present, these are used instead of \code{und_label}.
-Default = NULL.}
+\item{lang_guess_col}{Character, optional column name in the input data.frame
+to preserve as \code{lang_guess}. Default = NULL.}
 
 \item{model_path}{Character, path to the fastText \code{lid.176.bin} model.
-Defaults to \code{~/.cache/easieRnmt/lid.176.bin}.}
+Defaults to \verb{~/.cache/easieRnmt/lid.176.bin}.}
 
 \item{prob_threshold}{Numeric, threshold below which the detected language is replaced
-by "und" (or by the user-provided \code{lang_guess}). Default = 0.25.}
+by \code{und_label} (or by the user-provided \code{lang_guess}). Default = 0.25.}
 
 \item{und_label}{Character, label for undefined language if confidence is below
 \code{prob_threshold} and no \code{lang_guess} column is provided. Default = "und".}
 
-\item{max_char}{Integer, maximum number of characters per text after cleaning.
-Texts longer than this are truncated. Default = 5000.}
+\item{max_char}{Integer, maximum number of characters per text. Texts longer
+than this are truncated. Default = 5000.}
 
-\item{tokenize_sentences}{Logical, whether to split texts with more than
-3 sentences into individual sentences. Default = FALSE.}
+\item{tokenize_sentences}{Logical, whether to split texts into sentences and
+chunks. Default = TRUE.}
 
-\item{threads}{Integer, number of threads for fastText. Default = parallel::detectCores().}
+\item{threads}{Integer, number of threads for fastText. Default = \code{parallel::detectCores()}.}
 
 \item{verbose}{Logical, whether to print progress messages. Default = TRUE.}
 
-\item{...}{Additional parameters passed on to \code{clean_text}.}
+\item{...}{Additional parameters passed on to \code{clean_text()}.}
 }
 \value{
-A data.table with standardized columns: \code{row_id}, optional \code{id},
-\code{text_orig}, \code{text_clean}, \code{lang_guess}.
+A data.table with standardized columns:
+\code{sen_id}, \code{doc_idx}, \code{sen_idx}, optional \code{id}, \code{text_orig},
+\code{text_clean}, optional \code{lang_guess}, \code{lang}, and \code{lang_prob}.
 }
 \description{
 Identifies the language of each text in a character vector or data.frame
 using fastText's pretrained language identification model. Calls \code{clean_text()}
-internally to normalize the text before prediction. Returns a standardized data.table.
+internally to normalize and optionally tokenize the text before prediction.
 }

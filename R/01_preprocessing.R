@@ -45,62 +45,47 @@ replace_emoji_with_name <- function(text_vec) {
 }
 
 
-#' @title Clean and Normalize Text for Language Detection and Translation
+
+#' @title Clean, Normalize, and Tokenize Text
 #'
-#' @description Cleans and normalizes raw text data in preparation for language
-#' detection and machine translation. Handles emoji replacement, removal of
-#' unsupported characters, trimming, squishing whitespace, and limiting text
-#' length. Returns either a standardized data.table or a character vector.
+#' @description Cleans and optionally tokenizes raw text data. Handles emoji replacement,
+#' removal of unsupported characters, normalization, sentence tokenization, and
+#' chunking into word-limited segments. Returns either a standardized data.table
+#' or a character vector.
 #'
 #' @param x Character vector or data.frame containing texts to clean.
-#' @param text_col Character, name of the text column if \code{x} is a data.frame.
-#' Ignored if \code{x} is a character vector. Default = "text".
+#' @param text_col Character, name of the text column if `x` is a data.frame.
+#' Ignored if `x` is a character vector. Default = "text".
 #' @param id_col Character, optional column name in the input data.frame to
-#' preserve as an identifier. Default = NULL.
+#' preserve as `id`. Default = NULL.
 #' @param lang_guess_col Character, optional column name in the input data.frame
-#' to preserve as a column named \code{lang_guess}. Default = NULL.
-#' @param replace_emojis Logical, whether to replace emojis with placeholder names.
-#' Default = TRUE.
+#' to preserve as `lang_guess`. Default = NULL.
+#' @param replace_emojis Logical, whether to replace emojis with placeholder
+#' names. Default = TRUE.
 #' @param replace_alphaless Logical, whether to replace strings that contain no
 #' alphabetic characters with empty strings. Default = TRUE.
 #' @param max_char Integer, maximum number of characters per text. Texts longer
 #' than this are truncated. Default = 5000.
-#' @param return_string Logical, if TRUE, return only the cleaned character vector
-#' (\code{text_clean}) instead of a full data.table. Default = FALSE.
+#' @param tokenize_sentences Logical, whether to split texts into sentences and
+#' chunks. Default = TRUE.
+#' @param max_words Integer, maximum number of words per sentence or chunk.
+#' Long sentences are split into chunks of this size. Default = 50.
+#' @param clean_characters Logical, whether to apply character normalization
+#' (regex replacements, squishing, punctuation handling). Default = TRUE.
+#' @param return_string Logical, if TRUE, return only the cleaned character
+#' vector (`text_clean`) instead of a full data.table. Default = FALSE.
 #' @param verbose Logical, whether to print progress messages. Default = TRUE.
 #'
-#' @details
-#' The cleaning pipeline performs the following steps:
-#' \enumerate{
-#'   \item Convert input to UTF-8.
-#'   \item Replace \code{NA} with empty strings.
-#'   \item Optionally replace emojis with placeholder names if
-#'   \code{replace_emojis = TRUE}.
-#'   \item Remove all characters except letters, numbers, punctuation, and
-#'   whitespace.
-#'   \item Normalize encoding to UTF-8 and substitute invalid bytes.
-#'   \item Truncate texts longer than \code{max_char}.
-#'   \item Optionally remove texts without alphabetic content if
-#'   \code{replace_alphaless = TRUE}.
-#'   \item Collapse multiple spaces into a single space.
-#' }
-#'
-#' The returned data.table is restricted to the columns
-#' \code{row_id}, \code{id} (if present), \code{text_orig}, \code{text_clean},
-#' and \code{lang_guess} (if present), in this fixed order.
-#'
 #' @return Either:
-#' \itemize{
-#'   \item A data.table with columns:
-#'   \itemize{
-#'     \item \code{row_id}: Row index of the input.
-#'     \item \code{id}: User-provided identifier, if available.
-#'     \item \code{text_orig}: Original text before cleaning.
-#'     \item \code{text_clean}: Cleaned and normalized text.
-#'     \item \code{lang_guess}: Optional language guess column, if present.
-#'   }
-#'   \item Or a character vector of cleaned texts if \code{return_string = TRUE}.
-#' }
+#' * A data.table with columns:
+#'   - `sen_id`: Unique identifier for each sentence or chunk.
+#'   - `doc_idx`: Row index of the original document in the input.
+#'   - `sen_idx`: Sentence/chunk index within each document.
+#'   - `id`: Optional user-provided identifier.
+#'   - `text_orig`: Original text.
+#'   - `text_clean`: Cleaned and normalized text.
+#'   - `lang_guess`: Optional language guess column, if present.
+#' * Or a character vector of cleaned texts if `return_string = TRUE`.
 #'
 #' @import data.table
 #' @export
@@ -111,17 +96,21 @@ clean_text <- function(x,
                        replace_emojis = TRUE,
                        replace_alphaless = TRUE,
                        max_char = 5000,
+                       tokenize_sentences = TRUE,
+                       max_words = 50,
+                       clean_characters = TRUE,
                        return_string = FALSE,
                        verbose = TRUE) {
 
   vmessage <- function(...) if (verbose) message(...)
 
+  # --- Input handling ---
   if (is.character(x)) {
-    dt <- data.table::data.table(row_id = seq_along(x), text_orig = x)
+    dt <- data.table::data.table(doc_idx = seq_along(x), text_orig = x)
   } else if (is.data.frame(x)) {
     if (!text_col %in% names(x)) stop("text_col not found in data.frame")
     dt <- data.table::as.data.table(x)
-    dt[, row_id := .I]
+    dt[, doc_idx := .I]
     data.table::setnames(dt, text_col, "text_orig")
     if (!is.null(id_col) && id_col %in% names(dt)) {
       data.table::setnames(dt, id_col, "id")
@@ -133,73 +122,105 @@ clean_text <- function(x,
     stop("x must be a character vector or data.frame")
   }
 
+  # --- Cleaning pipeline ---
   dt[, text_clean := enc2utf8(text_orig)]
   dt[is.na(text_clean), text_clean := ""]
-  if(replace_emojis)  dt[, text_clean := replace_emoji_with_name(text_clean)]
-
-  # keep only letters, numbers, punctuation, whitespace
-  dt[, text_clean := stringi::stri_replace_all_regex(text_clean, "[^\\p{L}\\p{N}\\p{P}\\p{Zs}]", " ")]
-
-
+  if (replace_emojis) dt[, text_clean := replace_emoji_with_name(text_clean)]
   dt[, text_clean := iconv(text_clean, from = "", to = "UTF-8", sub = " ")]
   dt[nchar(text_clean) > max_char, text_clean := substr(text_clean, 1, max_char)]
-  if(replace_alphaless) dt[!grepl("[[:alpha:]]", text_clean), text_clean := ""]
-  dt[, text_clean := textclean::replace_curly_quote(text_clean)]
+  if (replace_alphaless) dt[!grepl("[[:alpha:]]", text_clean), text_clean := ""]
 
-  # normalize numbers, collapse quotes, squish whitespace
-  dt[, text_clean := stringr::str_replace_all(text_clean, "(\\d)\\.(?=\\d)", "\\1 ")]
-  dt[, text_clean := stringr::str_replace_all(text_clean, "(\\d)\\.(?!\\d)", "\\1 ")]
-  dt[, text_clean := stringr::str_replace_all(text_clean, '\"{2,}', '"')]
-  dt[, text_clean := stringr::str_replace_all(text_clean, "'{2,}", "'")]
-  dt[, text_clean := stringr::str_squish(text_clean)]
+  if (clean_characters) {
+    dt[, text_clean := stringi::stri_replace_all_regex(
+      text_clean, "[^\\p{L}\\p{N}\\p{P}\\p{Zs}]", " "
+    )]
+    dt[, text_clean := textclean::replace_curly_quote(text_clean)]
+    dt[, text_clean := stringr::str_replace_all(text_clean, "(\\d)\\.(?=\\d)", "\\1 ")]
+    dt[, text_clean := stringr::str_replace_all(text_clean, "(\\d)\\.(?!\\d)", "\\1 ")]
+    dt[, text_clean := stringr::str_replace_all(text_clean, '\"{2,}', '"')]
+    dt[, text_clean := stringr::str_replace_all(text_clean, "'{2,}", "'")]
+    dt[, text_clean := stringr::str_squish(text_clean)]
+  }
 
-  # Ensure column order: row_id, id?, text_orig, text_clean, lang_guess?
-  cols_order <- c("row_id", "id", "text_orig", "text_clean", "lang_guess")
+  # --- Sentence + chunk tokenization ---
+  if (tokenize_sentences) {
+    vmessage("Tokenizing texts into sentences and chunks...")
+
+    tokenized_list <- tokenizers::tokenize_sentences(dt$text_clean)
+
+    tokenized_dt <- data.table::rbindlist(
+      lapply(seq_along(tokenized_list), function(i) {
+        sents <- unlist(tokenized_list[[i]])
+
+        # further split long sentences
+        sents_split <- unlist(lapply(seq_along(sents), function(j) {
+          if (tokenizers::count_words(sents[j]) > max_words) {
+            tokenizers::chunk_text(sents[j],
+                                   doc_id = paste0(i, "_", j),
+                                   chunk_size = max_words)
+          } else {
+            sents[j]
+          }
+        }))
+
+        data.table::data.table(
+          doc_idx = dt$doc_idx[i],
+          sen_idx = seq_along(sents_split),
+          text_clean = sents_split
+        )
+      }),
+      use.names = TRUE, fill = TRUE
+    )
+
+    # --- safer join of metadata (no recycling issues) ---
+    meta_cols <- setdiff(names(dt), "text_clean")
+    tokenized_dt <- dt[, ..meta_cols][tokenized_dt, on = "doc_idx"]
+
+    dt <- tokenized_dt
+  } else {
+    dt[, sen_idx := 1L]
+  }
+
+  # --- Create sen_id ---
+  dt[, sen_id := paste0(doc_idx, "_", sen_idx)]
+
+  # --- Column order ---
+  cols_order <- c("sen_id", "doc_idx", "sen_idx", "id", "text_orig", "text_clean", "lang_guess")
   cols_exist <- intersect(cols_order, names(dt))
   dt <- dt[, ..cols_exist]
   data.table::setcolorder(dt, cols_exist)
 
-  if(return_string){
+  # --- Sorting ---
+  data.table::setorder(dt, doc_idx, sen_idx)
+
+  if (return_string) {
     return(dt$text_clean)
-  }else{
+  } else {
     return(dt[])
   }
-
-
 }
-
 
 
 #' @title Detect Languages with fastText
 #'
 #' @description Identifies the language of each text in a character vector or data.frame
-#' using fastText's pretrained language identification model. Calls \code{clean_text()}
-#' internally to normalize the text before prediction. Returns a standardized data.table.
+#' using fastText's pretrained language identification model. Calls `clean_text()`
+#' internally to normalize and optionally tokenize the text before prediction.
 #'
-#' @param x Character vector or data.frame containing texts to identify.
-#' @param text_col Character, name of the text column if \code{x} is a data.frame.
-#' Ignored if \code{x} is a vector. Default = "text".
-#' @param id_col Character, optional column name in the input data.frame to preserve
-#' as an identifier. Default = NULL.
-#' @param lang_guess_col Character, optional column in the input data.frame containing
-#' user-specified language guesses. If present, these are used instead of \code{und_label}.
-#' Default = NULL.
-#' @param model_path Character, path to the fastText \code{lid.176.bin} model.
-#' Defaults to \code{~/.cache/easieRnmt/lid.176.bin}.
+#' @inheritParams clean_text
+#' @param model_path Character, path to the fastText `lid.176.bin` model.
+#' Defaults to `~/.cache/easieRnmt/lid.176.bin`.
 #' @param prob_threshold Numeric, threshold below which the detected language is replaced
-#' by "und" (or by the user-provided \code{lang_guess}). Default = 0.25.
+#' by `und_label` (or by the user-provided `lang_guess`). Default = 0.25.
 #' @param und_label Character, label for undefined language if confidence is below
-#' \code{prob_threshold} and no \code{lang_guess} column is provided. Default = "und".
-#' @param max_char Integer, maximum number of characters per text after cleaning.
-#' Texts longer than this are truncated. Default = 5000.
-#' @param tokenize_sentences Logical, whether to split texts with more than
-#' 3 sentences into individual sentences. Default = FALSE.
-#' @param threads Integer, number of threads for fastText. Default = parallel::detectCores().
-#' @param verbose Logical, whether to print progress messages. Default = TRUE.
-#' @param ... Additional parameters passed on to \code{clean_text}.
+#' `prob_threshold` and no `lang_guess` column is provided. Default = "und".
+#' @param threads Integer, number of threads for fastText. Default = `parallel::detectCores()`.
+#' @param ... Additional parameters passed on to `clean_text()`.
 #'
-#' @return A data.table with standardized columns: \code{row_id}, optional \code{id},
-#' \code{text_orig}, \code{text_clean}, \code{lang_guess}.
+#' @return A data.table with standardized columns:
+#' `sen_id`, `doc_idx`, `sen_idx`, optional `id`, `text_orig`,
+#' `text_clean`, optional `lang_guess`, `lang`, and `lang_prob`.
+#'
 #' @import data.table
 #' @export
 detect_languages <- function(x,
@@ -217,68 +238,19 @@ detect_languages <- function(x,
   if (!requireNamespace("fastText", quietly = TRUE)) stop("Package 'fastText' must be installed.")
   vmessage <- function(...) if (verbose) message(...)
 
-  # Step 1: Clean and standardize input
+  # Step 1: Clean (and optionally tokenize) input
   dt <- clean_text(
     x = x,
     text_col = text_col,
     id_col = id_col,
     lang_guess_col = lang_guess_col,
     max_char = max_char,
+    tokenize_sentences = tokenize_sentences,
     verbose = verbose,
     ...
   )
 
-  # Step 2b: sentence tokenization
-  if (tokenize_sentences) {
-    vmessage("Tokenizing long texts into sentences...")
-
-    # Count sentences and words
-    dt[, n_sen := tokenizers::count_sentences(text_clean)]
-    dt[, n_wor := tokenizers::count_words(text_clean)]
-
-    # Split into long and short datasets
-    dt_long <- dt[n_sen >= 2 & n_wor > 30]
-    dt_short <- dt[!row_id %in% dt_long$row_id]
-
-    if (nrow(dt_long) > 0) {
-      tokenized_list <- tokenizers::tokenize_sentences(dt_long$text_clean)
-
-      # Expand into data.table
-      tokenized_dt <- data.table::rbindlist(
-        lapply(seq_along(tokenized_list), function(i) {
-          sents <- unlist(tokenized_list[[i]])
-          data.table::data.table(
-            row_id = paste0(dt_long$row_id[i], "_", seq_along(sents)),
-            orig_row_id = dt_long$row_id[i],
-            text_clean = sents
-          )
-        }),
-        use.names = TRUE, fill = TRUE
-      )
-
-      # Merge metadata back (everything except text_clean/n_sen)
-      meta_cols <- setdiff(names(dt_long), c("text_clean", "n_sen"))
-      tokenized_dt <- merge(
-        tokenized_dt,
-        dt_long[, ..meta_cols],
-        by.x = "orig_row_id", by.y = "row_id",
-        all.x = TRUE
-      )
-
-      # Drop helper
-      tokenized_dt[, orig_row_id := NULL]
-      data.table::setnames(tokenized_dt, "row_id", "sen_row_id")
-      data.table::setnames(tokenized_dt, "sen_row_id", "row_id")
-
-      # Combine back
-      dt <- data.table::rbindlist(list(dt_short, tokenized_dt), use.names = TRUE, fill = TRUE)
-    }
-
-    dt[, n_sen := NULL] # cleanup
-  }
-
-
-  # Resolve fastText model path
+  # Step 2: ensure fastText model is available
   if (is.null(model_path)) {
     home <- path.expand("~")
     cache_dir <- file.path(home, ".cache", "easieRnmt")
@@ -294,12 +266,11 @@ detect_languages <- function(x,
     )
   }
 
-  # Prepare input for fastText
+  # Step 3: run fastText
   empty_idx <- which(dt$text_clean == "")
   texts_for_ft <- dt$text_clean
   texts_for_ft[empty_idx] <- " "
 
-  # Run fastText
   vmessage("Running fastText language detection...")
   ft_res <- tryCatch(
     fastText::language_identification(
@@ -311,77 +282,49 @@ detect_languages <- function(x,
   )
 
   if (nrow(ft_res) != nrow(dt)) {
-    stop("fastText returned ", nrow(ft_res), " rows for ", nrow(dt),
-         " inputs. Likely cause: unhandled special characters.")
+    stop("fastText returned ", nrow(ft_res), " rows for ", nrow(dt), " inputs.")
   }
 
-  # Attach predictions
+  # Step 4: attach predictions
   dt[, `:=`(
     lang = ft_res$iso_lang_1,
     lang_prob = ft_res$prob_1
   )]
 
-  # Low-confidence handling
   if (length(empty_idx) > 0) {
     dt[empty_idx, `:=`(lang = und_label, lang_prob = 0)]
   }
   dt[lang_prob < prob_threshold, lang := und_label]
 
-  # If user provided a lang_guess column, prefer it over und_label
   if ("lang_guess" %in% names(dt)) {
     dt[lang == und_label & !is.na(lang_guess) & lang_guess != "", lang := lang_guess]
   }
 
-  # Ensure standardized schema, including detection results
-  cols_order <- c("row_id", "id", "text_orig", "text_clean", "lang_guess", "lang", "lang_prob")
+  # Step 5: column order
+  cols_order <- c("sen_id", "doc_idx", "sen_idx", "id", "text_orig",
+                  "text_clean", "lang_guess", "lang", "lang_prob")
   cols_exist <- intersect(cols_order, names(dt))
   dt <- dt[, ..cols_exist]
-  data.table::setcolorder(dt, cols_exist)
 
   return(dt[])
 }
 
 
-
 #' @title Preprocess Text for Translation
 #'
-#' @description Wrapper around \code{detect_languages()} that detects languages,
+#' @description Wrapper around `detect_languages()` that detects languages,
 #' reprocesses low-confidence cases, and splits the data into homogeneous
-#' language groups for translation. Optionally splits large groups into
-#' smaller chunks.
+#' language groups for translation. Tokenization can be performed before or
+#' after language detection.
 #'
-#' @param x Character vector or data.frame containing texts to process.
-#' @param text_col Character, name of the text column if \code{x} is a data.frame.
-#' Ignored if \code{x} is a character vector. Default = "text".
-#' @param id_col Character, optional column name in the input data.frame to
-#' preserve as an identifier. Default = NULL.
-#' @param lang_guess_col Character, optional column name in the input data.frame
-#' to preserve as a column named \code{lang_guess}. Default = NULL.
-#' @param targ_lang Character, fallback language code to assign when fastText
-#' detection is uncertain and no \code{lang_guess} is available. Required.
-#' @param model_path Character, path to the fastText \code{lid.176.bin} model.
-#' Defaults to \code{~/.cache/easieRnmt/lid.176.bin}.
-#' @param prob_threshold Numeric, threshold below which the detected language is
-#' replaced by \code{und_label}. Default = 0.25.
-#' @param und_label Character, label for undefined language. Default = "und".
-#' @param max_char Integer, maximum number of characters per text after cleaning.
-#' Texts longer than this are truncated. Default = 5000.
+#' @inheritParams detect_languages
+#' @param targ_lang Character, fallback language code when detection is uncertain.
 #' @param chunk_size Integer, optional. If provided, split each homogeneous
-#' language data.table into chunks of at most \code{chunk_size} rows.
-#' Chunked tables are suffixed with \code{"_pt1"}, \code{"_pt2"}, etc.
-#' Default = NULL (no further splitting).
-#' @param tokenize_sentences Logical, whether to split texts with more than
-#' 3 sentences into individual sentences. Default = TRUE.
-#' @param tokenize_when Character, determines when to tokenize into sentences.
-#' Options are \code{"before"} or \code{"after"} language detection.
-#' @param threads Integer, number of threads for fastText. Default =
-#' \code{parallel::detectCores()}.
-#' @param verbose Logical, whether to print progress messages. Default = TRUE.
-#' @param ... Additional parameters passed on to \code{clean_text()}.
+#' language data.table into chunks of at most `chunk_size` rows.
+#' @param tokenize_when Character, determines when to tokenize: `"before"` or `"after"`.
 #'
 #' @return A named list of data.tables, each containing texts of one homogeneous
-#' language or language+part chunk. The list names correspond to the language
-#' codes (or suffixed with \code{"_pt"} for chunked groups).
+#' language or language+part chunk.
 #' @import data.table
 #' @export
 preprocess <- function(x,
@@ -400,14 +343,11 @@ preprocess <- function(x,
                        verbose = TRUE,
                        ...) {
   if (missing(targ_lang)) stop("'targ_lang' must be specified")
-
   vmessage <- function(...) if (verbose) message(...)
 
-  # Handle tokenize when
-  tokenize_before <- tokenize_sentences
-  tokenize_after <- tokenize_sentences
-  if(tokenize_when == "after") tokenize_before <- FALSE
-  if(tokenize_when == "before") tokenize_after <- FALSE
+  # Decide when to tokenize
+  tokenize_before <- (tokenize_sentences && tokenize_when == "before")
+  tokenize_after  <- (tokenize_sentences && tokenize_when == "after")
 
   # Step 1: run language detection
   dt <- detect_languages(
@@ -427,88 +367,53 @@ preprocess <- function(x,
 
   # Step 2: handle uncertain cases
   idx_und <- which(dt$lang == und_label)
-
   if (length(idx_und) > 0) {
     vmessage("Re-cleaning ", length(idx_und), " uncertain texts...")
-
-    # Re-clean text_orig for these cases
     dt$text_clean[idx_und] <- clean_text(
       x = dt$text_orig[idx_und],
       replace_alphaless = FALSE,
       return_string = TRUE,
       verbose = verbose
     )
-
-    # Replace lang with lang_guess (if available) or targ_lang
     if ("lang_guess" %in% names(dt)) {
       dt[idx_und, lang := data.table::fifelse(!is.na(lang_guess) & lang_guess != "",
-                                              lang_guess,
-                                              targ_lang)]
+                                              lang_guess, targ_lang)]
     } else {
       dt[idx_und, lang := targ_lang]
     }
   }
 
-  # Step 2b: sentence tokenization
+  # Step 3: tokenize after language detection if requested
   if (tokenize_after) {
-    vmessage("Tokenizing long texts into sentences...")
+    vmessage("Tokenizing texts after language detection...")
 
-    # Count sentences
-    dt[, n_sen := tokenizers::count_sentences(text_clean)]
+    # Save predictions first
+    lang_meta <- dt[, .(doc_idx, lang, lang_prob)]
 
-    # Split rows with >3 sentences
-    dt_long <- dt[n_sen > 3]
-    dt_short <- dt[n_sen <= 3]
+    # Re-run clean_text with tokenization
+    dt <- clean_text(
+      x = dt,
+      text_col = "text_clean",
+      id_col = "id",
+      lang_guess_col = "lang_guess",
+      tokenize_sentences = TRUE,
+      verbose = verbose
+    )
 
-    if (nrow(dt_long) > 0) {
-      tokenized_list <- tokenizers::tokenize_sentences(dt_long$text_clean)
-
-      # Expand into data.table
-      tokenized_dt <- data.table::rbindlist(
-        lapply(seq_along(tokenized_list), function(i) {
-          sents <- unlist(tokenized_list[[i]])
-          data.table::data.table(
-            row_id = paste0(dt_long$row_id[i], "_", seq_along(sents)),
-            orig_row_id = dt_long$row_id[i],
-            text_clean = sents
-          )
-        }),
-        use.names = TRUE, fill = TRUE
-      )
-
-      # Merge metadata back (everything except text_clean/n_sen)
-      meta_cols <- setdiff(names(dt_long), c("text_clean", "n_sen"))
-      tokenized_dt <- merge(
-        tokenized_dt,
-        dt_long[, ..meta_cols],
-        by.x = "orig_row_id", by.y = "row_id",
-        all.x = TRUE
-      )
-
-      # Drop helper
-      tokenized_dt[, orig_row_id := NULL]
-      data.table::setnames(tokenized_dt, "row_id", "sen_row_id")
-      data.table::setnames(tokenized_dt, "sen_row_id", "row_id")
-
-      # Combine back
-      dt <- data.table::rbindlist(list(dt_short, tokenized_dt), use.names = TRUE, fill = TRUE)
-    }
-
-    dt[, n_sen := NULL] # cleanup
+    # Re-attach predictions
+    dt <- merge(dt, lang_meta, by = "doc_idx", all.x = TRUE)
   }
 
-
-  # Step 3: split into homogeneous groups
+  # Step 4: split into homogeneous groups
   out <- split(dt, by = "lang", keep.by = TRUE, sorted = TRUE)
 
-  # Step 4: optional chunking
+  # Step 5: optional chunking
   if (!is.null(chunk_size)) {
     chunked_out <- list()
     for (lang_name in names(out)) {
       dt_lang <- out[[lang_name]]
       n <- nrow(dt_lang)
       if (n > chunk_size) {
-        nchunks <- ceiling(n / chunk_size)
         idx_split <- split(seq_len(n), ceiling(seq_along(seq_len(n)) / chunk_size))
         for (i in seq_along(idx_split)) {
           chunk <- dt_lang[idx_split[[i]], ]
@@ -524,3 +429,4 @@ preprocess <- function(x,
 
   return(out)
 }
+

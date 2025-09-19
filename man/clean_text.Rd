@@ -2,7 +2,7 @@
 % Please edit documentation in R/01_preprocessing.R
 \name{clean_text}
 \alias{clean_text}
-\title{Clean and Normalize Text for Language Detection and Translation}
+\title{Clean, Normalize, and Tokenize Text}
 \usage{
 clean_text(
   x,
@@ -12,6 +12,9 @@ clean_text(
   replace_emojis = TRUE,
   replace_alphaless = TRUE,
   max_char = 5000,
+  tokenize_sentences = TRUE,
+  max_words = 30,
+  clean_characters = TRUE,
   return_string = FALSE,
   verbose = TRUE
 )
@@ -23,13 +26,13 @@ clean_text(
 Ignored if \code{x} is a character vector. Default = "text".}
 
 \item{id_col}{Character, optional column name in the input data.frame to
-preserve as an identifier. Default = NULL.}
+preserve as \code{id}. Default = NULL.}
 
 \item{lang_guess_col}{Character, optional column name in the input data.frame
-to preserve as a column named \code{lang_guess}. Default = NULL.}
+to preserve as \code{lang_guess}. Default = NULL.}
 
-\item{replace_emojis}{Logical, whether to replace emojis with placeholder names.
-Default = TRUE.}
+\item{replace_emojis}{Logical, whether to replace emojis with placeholder
+names. Default = TRUE.}
 
 \item{replace_alphaless}{Logical, whether to replace strings that contain no
 alphabetic characters with empty strings. Default = TRUE.}
@@ -37,8 +40,17 @@ alphabetic characters with empty strings. Default = TRUE.}
 \item{max_char}{Integer, maximum number of characters per text. Texts longer
 than this are truncated. Default = 5000.}
 
-\item{return_string}{Logical, if TRUE, return only the cleaned character vector
-(\code{text_clean}) instead of a full data.table. Default = FALSE.}
+\item{tokenize_sentences}{Logical, whether to split texts into sentences and
+chunks. Default = TRUE.}
+
+\item{max_words}{Integer, maximum number of words per sentence or chunk.
+Long sentences are split into chunks of this size. Default = 30.}
+
+\item{clean_characters}{Logical, whether to apply character normalization
+(regex replacements, squishing, punctuation handling). Default = TRUE.}
+
+\item{return_string}{Logical, if TRUE, return only the cleaned character
+vector (\code{text_clean}) instead of a full data.table. Default = FALSE.}
 
 \item{verbose}{Logical, whether to print progress messages. Default = TRUE.}
 }
@@ -47,9 +59,11 @@ Either:
 \itemize{
 \item A data.table with columns:
 \itemize{
-\item \code{row_id}: Row index of the input.
-\item \code{id}: User-provided identifier, if available.
-\item \code{text_orig}: Original text before cleaning.
+\item \code{sen_id}: Unique identifier for each sentence or chunk.
+\item \code{doc_idx}: Row index of the original document in the input.
+\item \code{sen_idx}: Sentence/chunk index within each document.
+\item \code{id}: Optional user-provided identifier.
+\item \code{text_orig}: Original text.
 \item \code{text_clean}: Cleaned and normalized text.
 \item \code{lang_guess}: Optional language guess column, if present.
 }
@@ -57,28 +71,8 @@ Either:
 }
 }
 \description{
-Cleans and normalizes raw text data in preparation for language
-detection and machine translation. Handles emoji replacement, removal of
-unsupported characters, trimming, squishing whitespace, and limiting text
-length. Returns either a standardized data.table or a character vector.
-}
-\details{
-The cleaning pipeline performs the following steps:
-\enumerate{
-\item Convert input to UTF-8.
-\item Replace \code{NA} with empty strings.
-\item Optionally replace emojis with placeholder names if
-\code{replace_emojis = TRUE}.
-\item Remove all characters except letters, numbers, punctuation, and
-whitespace.
-\item Normalize encoding to UTF-8 and substitute invalid bytes.
-\item Truncate texts longer than \code{max_char}.
-\item Optionally remove texts without alphabetic content if
-\code{replace_alphaless = TRUE}.
-\item Collapse multiple spaces into a single space.
-}
-
-The returned data.table is restricted to the columns
-\code{row_id}, \code{id} (if present), \code{text_orig}, \code{text_clean},
-and \code{lang_guess} (if present), in this fixed order.
+Cleans and optionally tokenizes raw text data. Handles emoji replacement,
+removal of unsupported characters, normalization, sentence tokenization, and
+chunking into word-limited segments. Returns either a standardized data.table
+or a character vector.
 }

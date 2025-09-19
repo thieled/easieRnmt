@@ -23,44 +23,40 @@ preprocess(
 )
 }
 \arguments{
-\item{x}{Character vector or data.frame containing texts to process.}
+\item{x}{Character vector or data.frame containing texts to clean.}
 
 \item{text_col}{Character, name of the text column if \code{x} is a data.frame.
 Ignored if \code{x} is a character vector. Default = "text".}
 
 \item{id_col}{Character, optional column name in the input data.frame to
-preserve as an identifier. Default = NULL.}
+preserve as \code{id}. Default = NULL.}
 
 \item{lang_guess_col}{Character, optional column name in the input data.frame
-to preserve as a column named \code{lang_guess}. Default = NULL.}
+to preserve as \code{lang_guess}. Default = NULL.}
 
-\item{targ_lang}{Character, fallback language code to assign when fastText
-detection is uncertain and no \code{lang_guess} is available. Required.}
+\item{targ_lang}{Character, fallback language code when detection is uncertain.}
 
 \item{model_path}{Character, path to the fastText \code{lid.176.bin} model.
-Defaults to \code{~/.cache/easieRnmt/lid.176.bin}.}
+Defaults to \verb{~/.cache/easieRnmt/lid.176.bin}.}
 
-\item{prob_threshold}{Numeric, threshold below which the detected language is
-replaced by \code{und_label}. Default = 0.25.}
+\item{prob_threshold}{Numeric, threshold below which the detected language is replaced
+by \code{und_label} (or by the user-provided \code{lang_guess}). Default = 0.25.}
 
-\item{und_label}{Character, label for undefined language. Default = "und".}
+\item{und_label}{Character, label for undefined language if confidence is below
+\code{prob_threshold} and no \code{lang_guess} column is provided. Default = "und".}
 
-\item{max_char}{Integer, maximum number of characters per text after cleaning.
-Texts longer than this are truncated. Default = 5000.}
+\item{max_char}{Integer, maximum number of characters per text. Texts longer
+than this are truncated. Default = 5000.}
 
 \item{chunk_size}{Integer, optional. If provided, split each homogeneous
-language data.table into chunks of at most \code{chunk_size} rows.
-Chunked tables are suffixed with \code{"_pt1"}, \code{"_pt2"}, etc.
-Default = NULL (no further splitting).}
+language data.table into chunks of at most \code{chunk_size} rows.}
 
-\item{tokenize_sentences}{Logical, whether to split texts with more than
-3 sentences into individual sentences. Default = TRUE.}
+\item{tokenize_sentences}{Logical, whether to split texts into sentences and
+chunks. Default = TRUE.}
 
-\item{tokenize_when}{Character, determines when to tokenize into sentences.
-Options are \code{"before"} or \code{"after"} language detection.}
+\item{tokenize_when}{Character, determines when to tokenize: \code{"before"} or \code{"after"}.}
 
-\item{threads}{Integer, number of threads for fastText. Default =
-\code{parallel::detectCores()}.}
+\item{threads}{Integer, number of threads for fastText. Default = \code{parallel::detectCores()}.}
 
 \item{verbose}{Logical, whether to print progress messages. Default = TRUE.}
 
@@ -68,12 +64,11 @@ Options are \code{"before"} or \code{"after"} language detection.}
 }
 \value{
 A named list of data.tables, each containing texts of one homogeneous
-language or language+part chunk. The list names correspond to the language
-codes (or suffixed with \code{"_pt"} for chunked groups).
+language or language+part chunk.
 }
 \description{
 Wrapper around \code{detect_languages()} that detects languages,
 reprocesses low-confidence cases, and splits the data into homogeneous
-language groups for translation. Optionally splits large groups into
-smaller chunks.
+language groups for translation. Tokenization can be performed before or
+after language detection.
 }

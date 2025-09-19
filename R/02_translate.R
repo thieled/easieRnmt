@@ -3,7 +3,7 @@
 #' @description Detects languages, reprocesses uncertain cases, optionally
 #'   splits long texts into sentences, splits the input into homogeneous
 #'   language groups, and calls the Python translator
-#'   (\code{easynmt_translate()}) on each group.
+#'   (`easynmt_translate()`) on each group.
 #'
 #' @inheritParams preprocess
 #' @param target_lang Character, target language for translation.
@@ -19,10 +19,10 @@
 #'   (target / source) below which retries are attempted (default 0.6).
 #' @param return_string Logical, if TRUE, return only the translated character vector. Default = FALSE.
 #' @param save_dir Optional character path. If provided, saves each processed
-#'   subset as an \code{.rds} file with its language/part name.
+#'   subset as an `.rds` file with its language/part name.
 #' @param tokenize_sentences Logical, if TRUE, split long texts into sentences
 #'   during preprocessing and reassemble them after translation. Default = FALSE.
-#' @param ... Additional parameters passed on to \code{clean_text()} during preprocessing.
+#' @param ... Additional parameters passed on to `clean_text()` during preprocessing.
 #'
 #' @return A data.table with original data plus translation results merged in.
 #' @export
@@ -61,7 +61,7 @@ translate <- function(
   }
 
   # --- Step 1: check if x is already preprocessed ---
-  if (is.list(x) && all(c("row_id", "lang", "text_clean") %in% names(x[[1]]))) {
+  if (is.list(x) && all(c("sen_id", "lang", "text_clean") %in% names(x[[1]]))) {
     preproc_list <- x
     vmessage("Input detected as preprocessed. Skipping preprocess().")
   } else {
@@ -85,6 +85,11 @@ translate <- function(
   # --- Helper for one subset ---
   process_one <- function(dt, lang_name) {
     if (verbose) message("Processing language: ", lang_name)
+
+    # --- ensure Python compatibility ---
+    if (!"row_id" %in% names(dt)) {
+      dt[, row_id := sen_id]
+    }
 
     res <- reticulate::py$easynmt_translate(
       df = dt,
@@ -116,12 +121,10 @@ translate <- function(
       by = "row_id", all.x = TRUE
     )
 
-    # Sanity check: clear translations if text_orig was NA
     if ("text_orig" %in% names(out)) {
       out[is.na(text_orig), translation := NA_character_]
     }
 
-    # Optional saving
     if (!is.null(save_dir)) {
       if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
       file_path <- file.path(save_dir, paste0(lang_name, ".rds"))
@@ -131,6 +134,7 @@ translate <- function(
 
     return(out[])
   }
+
 
   # --- Step 2: Apply to all language groups ---
   out_list <- pbapply::pblapply(
@@ -143,54 +147,37 @@ translate <- function(
   out <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
 
   # --- Step 4: Reassemble tokenized sentences ---
-  if (tokenize_sentences && any(grepl("^[0-9]+_\\d+$", out$row_id))) {
-    out[, orig_row_id := sub("_\\d+$", "", row_id)]
+  if (tokenize_sentences && "sen_idx" %in% names(out) && max(out$sen_idx, na.rm = TRUE) > 1) {
+    stitched <- out[, {
+      res <- list(
+        sen_id      = unique(as.character(doc_idx)), # new unified ID = doc_idx
+        doc_idx     = unique(doc_idx),
+        text_clean  = paste(text_clean, collapse = " "),
+        translation = paste(translation, collapse = " ")
+      )
+      if ("lang" %in% names(.SD))        res$lang        <- names(sort(table(lang), decreasing = TRUE))[1]
+      if ("lang_prob" %in% names(.SD))   res$lang_prob   <- mean(lang_prob, na.rm = TRUE)
+      if ("lang_target" %in% names(.SD)) res$lang_target <- lang_target[1]
+      if ("tl_error" %in% names(.SD))    res$tl_error    <- tl_error[1]
+      if ("tl_datetime" %in% names(.SD)) res$tl_datetime <- tl_datetime[1]
+      if ("tl_model" %in% names(.SD))    res$tl_model    <- tl_model[1]
+      if ("text_orig" %in% names(.SD))   res$text_orig   <- text_orig[1]
+      if ("id" %in% names(.SD))          res$id          <- id[1]
+      if ("lang_guess" %in% names(.SD))  res$lang_guess  <- lang_guess[1]
+      res
+    }, by = doc_idx]
 
-    stitched <- out[grepl("^[0-9]+_\\d+$", row_id),
-                    {
-                      res <- list(
-                        row_id      = unique(orig_row_id),
-                        text_clean  = paste(text_clean, collapse = " "),
-                        translation = paste(translation, collapse = " ")
-                      )
-                      if ("lang" %in% names(.SD)) {
-                        res$lang <- names(sort(table(lang), decreasing = TRUE))[1]
-                      }
-                      if ("lang_prob" %in% names(.SD)) {
-                        res$lang_prob <- mean(lang_prob, na.rm = TRUE)
-                      }
-                      if ("lang_target" %in% names(.SD)) res$lang_target <- lang_target[1]
-                      if ("tl_error" %in% names(.SD))    res$tl_error    <- tl_error[1]
-                      if ("tl_datetime" %in% names(.SD)) res$tl_datetime <- tl_datetime[1]
-                      if ("tl_model" %in% names(.SD))    res$tl_model    <- tl_model[1]
-                      if ("text_orig" %in% names(.SD))   res$text_orig   <- text_orig[1]
-                      if ("id" %in% names(.SD))          res$id          <- id[1]
-                      if ("lang_guess" %in% names(.SD))  res$lang_guess  <- lang_guess[1]
-                      res
-                    },
-                    by = orig_row_id
-    ]
-
-    not_tokenized <- out[!grepl("^[0-9]+_\\d+$", row_id)]
-
-    out <- data.table::rbindlist(list(not_tokenized, stitched), use.names = TRUE, fill = TRUE)
-    out[, row_id := as.integer(row_id)]
-    data.table::setorder(out, row_id)
-    out[, orig_row_id := NULL]
-  } else {
-    data.table::setorder(out, row_id)
+    out <- stitched[]
   }
 
-  # Set column order
+  # --- Step 5: Column order ---
   desired_cols <- c(
-    "row_id", "id", "text_orig", "text_clean",
+    "sen_id", "doc_idx", "sen_idx", "id", "text_orig", "text_clean",
     "lang", "lang_prob", "lang_guess", "lang_target",
     "translation", "tl_error", "tl_datetime", "tl_model"
   )
-
   available_cols <- intersect(desired_cols, names(out))
   other_cols     <- setdiff(names(out), desired_cols)
-
   data.table::setcolorder(out, c(available_cols, other_cols))
 
   if (return_string) {
