@@ -22,6 +22,9 @@ utils::globalVariables(c(".I",
                          "id",
                          "tokenize_after",
                          "tokenize_before",
-                         "n_wor"
+                         "n_wor",
+                         "doc_idx",
+                         "sen_id",
+                         "sen_idx"
                          )
 )

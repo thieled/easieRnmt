@@ -366,22 +366,32 @@ preprocess <- function(x,
   )
 
   # Step 2: handle uncertain cases
-  idx_und <- which(dt$lang == und_label)
-  if (length(idx_und) > 0) {
-    vmessage("Re-cleaning ", length(idx_und), " uncertain texts...")
-    dt$text_clean[idx_und] <- clean_text(
-      x = dt$text_orig[idx_und],
-      replace_alphaless = FALSE,
-      return_string = TRUE,
-      verbose = verbose
-    )
-    if ("lang_guess" %in% names(dt)) {
-      dt[idx_und, lang := data.table::fifelse(!is.na(lang_guess) & lang_guess != "",
-                                              lang_guess, targ_lang)]
-    } else {
-      dt[idx_und, lang := targ_lang]
+  if(!is.null(lang_guess_col) && und_label != targ_lang) {
+
+    idx_und <- which(dt$lang == und_label)
+    if (length(idx_und) > 0) {
+      vmessage("Re-cleaning ", length(idx_und), " uncertain texts...")
+
+      length(dt$text_orig[idx_und])
+      length(dt$text_clean[idx_und])
+
+      dt$text_clean[idx_und] <- clean_text(
+        x = dt$text_orig[idx_und],
+        replace_alphaless = FALSE,
+        return_string = TRUE,
+        verbose = verbose,
+        tokenize_sentences = F
+      )
+
+      if ("lang_guess" %in% names(dt)) {
+        dt[idx_und, lang := data.table::fifelse(!is.na(lang_guess) & lang_guess != "",
+                                                lang_guess, targ_lang)]
+      } else {
+        dt[idx_und, lang := targ_lang]
+      }
     }
   }
+
 
   # Step 3: tokenize after language detection if requested
   if (tokenize_after) {

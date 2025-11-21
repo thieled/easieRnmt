@@ -13,7 +13,7 @@ clean_text(
   replace_alphaless = TRUE,
   max_char = 5000,
   tokenize_sentences = TRUE,
-  max_words = 30,
+  max_words = 50,
   clean_characters = TRUE,
   return_string = FALSE,
   verbose = TRUE
@@ -44,7 +44,7 @@ than this are truncated. Default = 5000.}
 chunks. Default = TRUE.}
 
 \item{max_words}{Integer, maximum number of words per sentence or chunk.
-Long sentences are split into chunks of this size. Default = 30.}
+Long sentences are split into chunks of this size. Default = 50.}
 
 \item{clean_characters}{Logical, whether to apply character normalization
 (regex replacements, squishing, punctuation handling). Default = TRUE.}
