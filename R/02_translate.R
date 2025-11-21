@@ -151,7 +151,7 @@ translate <- function(
     stitched <- out[, {
       res <- list(
         sen_id      = unique(as.character(doc_idx)), # new unified ID = doc_idx
-        doc_idx     = unique(doc_idx),
+    #    doc_idx     = unique(doc_idx),
         text_clean  = paste(text_clean, collapse = " "),
         translation = paste(translation, collapse = " ")
       )
