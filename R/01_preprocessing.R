@@ -422,7 +422,7 @@ preprocess <- function(x,
     )
 
     # Re-attach predictions
-    dt <- merge(x, lang_meta, by = "doc_idx", all.x = TRUE)
+    dt <- merge(dt, lang_meta, by = "doc_idx", all.x = TRUE)
   }
 
   # Step 4: split into homogeneous groups
