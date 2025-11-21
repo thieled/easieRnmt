@@ -19,6 +19,7 @@ preprocess(
   tokenize_when = "after",
   threads = parallel::detectCores(),
   verbose = TRUE,
+  max_words = max_words,
   ...
 )
 }
@@ -59,6 +60,9 @@ chunks. Default = TRUE.}
 \item{threads}{Integer, number of threads for fastText. Default = \code{parallel::detectCores()}.}
 
 \item{verbose}{Logical, whether to print progress messages. Default = TRUE.}
+
+\item{max_words}{Integer, maximum number of words per sentence or chunk.
+Long sentences are split into chunks of this size. Default = 50.}
 
 \item{...}{Additional parameters passed on to \code{clean_text()}.}
 }

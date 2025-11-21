@@ -234,6 +234,7 @@ detect_languages <- function(x,
                              tokenize_sentences = FALSE,
                              threads = parallel::detectCores(),
                              verbose = TRUE,
+                             max_words = 50,
                              ...) {
   if (!requireNamespace("fastText", quietly = TRUE)) stop("Package 'fastText' must be installed.")
   vmessage <- function(...) if (verbose) message(...)
@@ -247,6 +248,7 @@ detect_languages <- function(x,
     max_char = max_char,
     tokenize_sentences = tokenize_sentences,
     verbose = verbose,
+    max_words = max_words,
     ...
   )
 
@@ -341,6 +343,7 @@ preprocess <- function(x,
                        tokenize_when = "after",
                        threads = parallel::detectCores(),
                        verbose = TRUE,
+                       max_words = max_words,
                        ...) {
   if (missing(targ_lang)) stop("'targ_lang' must be specified")
   vmessage <- function(...) if (verbose) message(...)
@@ -362,6 +365,7 @@ preprocess <- function(x,
     threads = threads,
     verbose = verbose,
     tokenize_sentences = tokenize_before,
+    max_words = max_words,
     ...
   )
 
@@ -397,12 +401,19 @@ preprocess <- function(x,
   if (tokenize_after) {
     vmessage("Tokenizing texts after language detection...")
 
+    # Copy and clean
+    x <- data.table::copy(dt)
+
+    if("sen_id" %in% names(x)) x[,sen_id := NULL]
+    if("sen_idx" %in% names(x)) x[,sen_idx := NULL]
+
+
     # Save predictions first
-    lang_meta <- dt[, .(doc_idx, lang, lang_prob)]
+    lang_meta <- x[, .(doc_idx, lang, lang_prob)]
 
     # Re-run clean_text with tokenization
     dt <- clean_text(
-      x = dt,
+      x = x,
       text_col = "text_clean",
       id_col = "id",
       lang_guess_col = "lang_guess",
@@ -411,7 +422,7 @@ preprocess <- function(x,
     )
 
     # Re-attach predictions
-    dt <- merge(dt, lang_meta, by = "doc_idx", all.x = TRUE)
+    dt <- merge(x, lang_meta, by = "doc_idx", all.x = TRUE)
   }
 
   # Step 4: split into homogeneous groups
