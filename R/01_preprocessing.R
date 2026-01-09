@@ -152,16 +152,20 @@ clean_text <- function(x,
       lapply(seq_along(tokenized_list), function(i) {
         sents <- unlist(tokenized_list[[i]])
 
-        # further split long sentences
+        # further split long sentences (whitespace-based; preserves punctuation)
         sents_split <- unlist(lapply(seq_along(sents), function(j) {
           if (tokenizers::count_words(sents[j]) > max_words) {
-            tokenizers::chunk_text(sents[j],
-                                   doc_id = paste0(i, "_", j),
-                                   chunk_size = max_words)
+            w <- unlist(stringi::stri_split_regex(stringr::str_squish(sents[j]), "\\s+"))
+            starts <- seq.int(1L, length(w), by = max_words)
+            vapply(
+              starts,
+              function(s) paste(w[s:min(s + max_words - 1L, length(w))], collapse = " "),
+              character(1L)
+            )
           } else {
             sents[j]
           }
-        }))
+        }), use.names = FALSE)
 
         data.table::data.table(
           doc_idx = dt$doc_idx[i],
@@ -171,6 +175,31 @@ clean_text <- function(x,
       }),
       use.names = TRUE, fill = TRUE
     )
+
+
+    # tokenized_dt <- data.table::rbindlist(
+    #   lapply(seq_along(tokenized_list), function(i) {
+    #     sents <- unlist(tokenized_list[[i]])
+    #
+    #     # further split long sentences
+    #     sents_split <- unlist(lapply(seq_along(sents), function(j) {
+    #       if (tokenizers::count_words(sents[j]) > max_words) {
+    #         tokenizers::chunk_text(sents[j],
+    #                                doc_id = paste0(i, "_", j),
+    #                                chunk_size = max_words)
+    #       } else {
+    #         sents[j]
+    #       }
+    #     }))
+    #
+    #     data.table::data.table(
+    #       doc_idx = dt$doc_idx[i],
+    #       sen_idx = seq_along(sents_split),
+    #       text_clean = sents_split
+    #     )
+    #   }),
+    #   use.names = TRUE, fill = TRUE
+    # )
 
     # --- safer join of metadata (no recycling issues) ---
     meta_cols <- setdiff(names(dt), "text_clean")
