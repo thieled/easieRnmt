@@ -5,6 +5,7 @@ import random
 import numpy as np
 import pandas as pd
 from datetime import datetime
+import gc  # NEW
 
 
 # --- reproducibility setup ---
@@ -25,6 +26,14 @@ def get_model(model_name: str = "opus-mt"):
     if model_name not in _models:
         _models[model_name] = EasyNMT(model_name)
     return _models[model_name]
+
+
+# NEW: centralized cleanup helper
+def _cuda_flush():
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
 
 
 def easynmt_translate(
@@ -82,14 +91,16 @@ def easynmt_translate(
         batch_langs = source_langs[i:i + batch_size]
 
         try:
-            batch_translations = model_obj.translate(
-                batch_texts,
-                source_lang=batch_langs[0] if batch_langs[0] else None,
-                target_lang=target_lang,
-                max_length=safe_max_len,
-                beam_size=beam_size,
-                perform_sentence_splitting=False,
-            )
+            # NEW: inference_mode reduces memory overhead vs normal mode
+            with torch.inference_mode():
+                batch_translations = model_obj.translate(
+                    batch_texts,
+                    source_lang=batch_langs[0] if batch_langs[0] else None,
+                    target_lang=target_lang,
+                    max_length=safe_max_len,
+                    beam_size=beam_size,
+                    perform_sentence_splitting=False,
+                )
 
             if isinstance(batch_translations, str):
                 batch_translations = [batch_translations]
@@ -101,10 +112,8 @@ def easynmt_translate(
             translations.extend([None] * len(batch_texts))
             errors.extend([str(e)] * len(batch_texts))
 
-        # cleanup only if CUDA is available
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+        # NEW: always flush (cuda + gc); cheap on CPU-only
+        _cuda_flush()
 
     out = pd.DataFrame({
         "row_id": ids,
@@ -136,15 +145,23 @@ def easynmt_translate(
             while unique_ratio < check_threshold and retry_count < n_retries:
                 retry_count += 1
                 set_seed(seed + retry_count, deterministic=False)
+
                 try:
-                    new_translation = model_obj.translate(
-                        [row["text"]],
-                        source_lang=row["lang_source"],
-                        target_lang=target_lang,
-                        max_length=safe_max_len,
-                        beam_size=max(beam_size, 5),
-                        perform_sentence_splitting=False,
-                    )
+                    # NEW: flush before retry (helps with fragmentation after long runs)
+                    _cuda_flush()
+
+                    # NEW: inference_mode here too
+                    with torch.inference_mode():
+                        new_translation = model_obj.translate(
+                            [row["text"]],
+                            source_lang=row["lang_source"],
+                            target_lang=target_lang,
+                            max_length=safe_max_len,
+                            # NEW: do not increase beam size (common OOM trigger)
+                            beam_size=beam_size,
+                            perform_sentence_splitting=False,
+                        )
+
                     if isinstance(new_translation, list):
                         new_translation = new_translation[0]
 
@@ -162,6 +179,9 @@ def easynmt_translate(
                 except Exception as e:
                     out.at[idx, "error"] = f"Retry {retry_count} failed: {e}"
                     break
+                finally:
+                    # NEW: flush after each retry attempt too
+                    _cuda_flush()
 
     # --- sort by row_id for stability ---
     out = out.sort_values("row_id").reset_index(drop=True)
