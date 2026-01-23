@@ -4,6 +4,8 @@
 # easieRnmt <img src="man/figures/logo.png" align="right" height="120" alt="" />
 
 <!-- badges: start -->
+
+[![R-CMD-check](https://github.com/thieled/easieRnmt/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/thieled/easieRnmt/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 The goal of easieRnmt is to provide a user-friendly R wrapper around the
