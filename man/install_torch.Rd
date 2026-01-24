@@ -15,8 +15,7 @@ install_torch(
 \item{conda_env_name}{Character. Name of the conda environment. Default "r-easynmt".}
 
 \item{python_version}{Character. Python version to use when creating the Conda environment.
-Defaults to \code{"3.11"}. If the environment already exists, the version is not changed
-unless \code{force = TRUE}.}
+Defaults to \code{"3.11"}. If the environment already exists, the version is not changed.}
 
 \item{conda_path}{Character. Path to Conda installation. If NULL, autodetect.}
 
@@ -27,6 +26,7 @@ Invisibly returns \code{NULL}.
 }
 \description{
 Installs PyTorch and related libraries (\code{torch}, \code{torchvision}, \code{torchaudio})
-in a Conda environment created with \code{\link[=install_conda_env]{install_conda_env()}}. The function detects CUDA/GPU
-availability and installs the appropriate build. If the GPU build URL is invalid, it falls back to CPU.
+in a Conda environment created with \code{\link[=install_conda_env]{install_conda_env()}}. CUDA availability is detected
+via the NVIDIA driver (\code{nvidia-smi}, not \code{nvcc}). A compatible PyTorch wheel index
+(e.g. \code{cu126}, \code{cu128}) is selected conservatively and validated. Falls back to CPU if needed.
 }
