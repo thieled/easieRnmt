@@ -108,8 +108,9 @@ translate <- function(
 
    # Convert pandas DataFrame using to_dict(orient='records')
     res_list <- reticulate::py_to_r(res$to_dict(orient = "records"))
-    res <- data.table::rbindlist(res_list, fill = TRUE)
+    res <- suppressWarnings(data.table::rbindlist(res_list, fill = TRUE))
 
+    # merge back with original data
     out <- merge(
       dt,
       res[, .(
