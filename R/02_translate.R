@@ -106,9 +106,9 @@ translate <- function(
       check_threshold = check_threshold
     )
 
-    res <- reticulate::py_to_r(res)
-
-    res <- data.table::as.data.table(res)
+   # Convert pandas DataFrame using to_dict(orient='records')
+    res_list <- reticulate::py_to_r(res$to_dict(orient = "records"))
+    res <- data.table::rbindlist(res_list, fill = TRUE)
 
     out <- merge(
       dt,
