@@ -587,45 +587,6 @@ install_easynmt <- function(
                    conda_path = conda_path,
                    force = TRUE)
 
-#   # 4. Check if FastText works
-#  py_bin <- reticulate::py_exe()
-#   check_code <- "
-# try:
-#     import fasttext
-#     ok = hasattr(fasttext, 'train_unsupervised')
-#     print('OK' if ok else 'FAIL')
-# except Exception:
-#     print('FAIL')
-# "
-#   tmpfile <- tempfile(fileext = ".py")
-#   writeLines(check_code, tmpfile)
-#   result <- system(sprintf('"%s" "%s"', py_bin, tmpfile), intern = TRUE)
-#   unlink(tmpfile)
-#
-#   fasttext_ok <- any(grepl("^OK$", result))
-#
-#   # 5. Install EasyNMT (+ deps) depending on FastText availability
-#   if (fasttext_ok) {
-#     message("FastText detected. Installing EasyNMT with dependencies...")
-#     cmd <- sprintf(
-#       '"%s" -m pip install easynmt nltk numpy pandas protobuf sentencepiece==0.2.0 tqdm transformers==4.9.0 langdetect sacremoses',
-#       py_bin
-#     )
-#     system(cmd)
-#   } else {
-#    warning("FastText not detected. Installing EasyNMT without FastText and adding other dependencies...")
-#
-#     cmd1 <- sprintf('"%s" -m pip install easynmt --no-deps', py_bin)
-#     cmd2 <- sprintf(
-#       '"%s" -m pip install nltk numpy pandas protobuf sentencepiece tqdm transformers==4.9.0 langdetect sacremoses',
-#       py_bin
-#     )
-#     system(cmd1)
-#     system(cmd2)
-#   }
-
-  ### More robust attmept:
-
   # 4. Check if FastText works
   py_bin <- reticulate::py_exe()
   check_code <- "
@@ -660,7 +621,7 @@ except Exception:
     system2(
       py_bin,
       args = c("-m", "pip", "install", "easynmt", "nltk", "numpy", "pandas",
-               "protobuf", "sentencepiece==0.2.0", "tqdm", "transformers==4.9.0",
+               "protobuf", "sentencepiece==0.2.0", "tqdm",
                "langdetect", "sacremoses")
     )
   } else {
@@ -670,11 +631,9 @@ except Exception:
     system2(
       py_bin,
       args = c("-m", "pip", "install", "nltk", "numpy", "pandas", "protobuf",
-               "sentencepiece", "tqdm", "transformers==4.9.0", "langdetect", "sacremoses")
+               "sentencepiece", "tqdm", "langdetect", "sacremoses")
     )
   }
-
-  ####
 
   # 6. Install additional dependencies via install_deps()
   install_deps(
