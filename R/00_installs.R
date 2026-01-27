@@ -586,7 +586,7 @@ install_easynmt <- function(
 #                    force = TRUE)
 #
 #   # 4. Check if FastText works
-#   py_bin <- reticulate::py_exe()
+#  py_bin <- reticulate::py_exe()
 #   check_code <- "
 # try:
 #     import fasttext
@@ -612,6 +612,8 @@ install_easynmt <- function(
 #     system(cmd)
 #   } else {
 #    warning("FastText not detected. Installing EasyNMT without FastText and adding other dependencies...")
+
+    py_bin <- reticulate::py_exe()
 
     cmd1 <- sprintf('"%s" -m pip install easynmt --no-deps', py_bin)
     cmd2 <- sprintf(
