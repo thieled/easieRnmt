@@ -627,6 +627,7 @@ install_easynmt <- function(
   ### More robust attmept:
 
   # 4. Check if FastText works
+  py_bin <- reticulate::py_exe()
   check_code <- "
 try:
     import fasttext
@@ -638,9 +639,8 @@ except Exception:
   tmpfile <- tempfile(fileext = ".py")
   writeLines(check_code, tmpfile)
 
-  # Use system2() for better cross-platform support
   result <- system2(
-    reticulate::py_exe(),
+    py_bin,
     args = shQuote(tmpfile, type = "cmd"),
     stdout = TRUE,
     stderr = FALSE
@@ -649,41 +649,28 @@ except Exception:
 
   fasttext_ok <- !is.null(result) && any(grepl("^OK$", trimws(result)))
 
-  # 5. Install EasyNMT (+ deps) depending on FastText availability
+  # 5. Upgrade pip first
+  if (verbose) message("Upgrading pip...")
+  system2(py_bin, args = c("-m", "pip", "install", "--upgrade", "pip"))
+
+  # 6. Install EasyNMT
   if (fasttext_ok) {
     if (verbose) message("FastText detected. Installing EasyNMT with dependencies...")
 
-    reticulate::py_install(
-      packages = c(
-        "easynmt", "nltk", "numpy", "pandas", "protobuf",
-        "sentencepiece==0.2.0", "tqdm", "transformers==4.9.0",
-        "langdetect", "sacremoses"
-      ),
-      envname = conda_env_name,
-      method = "conda",
-      pip = TRUE
+    system2(
+      py_bin,
+      args = c("-m", "pip", "install", "easynmt", "nltk", "numpy", "pandas",
+               "protobuf", "sentencepiece==0.2.0", "tqdm", "transformers==4.9.0",
+               "langdetect", "sacremoses")
     )
   } else {
     if (verbose) warning("FastText not detected. Installing EasyNMT without FastText...")
 
-    # Install easynmt without dependencies
-    reticulate::py_install(
-      packages = "easynmt",
-      envname = conda_env_name,
-      method = "conda",
-      pip = TRUE,
-      pip_options = "--no-deps"
-    )
-
-    # Install remaining dependencies
-    reticulate::py_install(
-      packages = c(
-        "nltk", "numpy", "pandas", "protobuf", "sentencepiece",
-        "tqdm", "transformers==4.9.0", "langdetect", "sacremoses"
-      ),
-      envname = conda_env_name,
-      method = "conda",
-      pip = TRUE
+    system2(py_bin, args = c("-m", "pip", "install", "easynmt", "--no-deps"))
+    system2(
+      py_bin,
+      args = c("-m", "pip", "install", "nltk", "numpy", "pandas", "protobuf",
+               "sentencepiece", "tqdm", "transformers==4.9.0", "langdetect", "sacremoses")
     )
   }
 
