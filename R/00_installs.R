@@ -369,7 +369,7 @@ validate_url <- function(url) {
 
 
 
-#' @title Install FastText in a Conda Environment
+#' @title Install FastText in a Conda Environment (deprecated)
 #'
 #' @description
 #' Installs the FastText library inside a conda environment managed through
@@ -578,48 +578,49 @@ install_easynmt <- function(
                 conda_path = conda_path,
                 verbose = verbose)
 
-  # 3. Install FastText (prebuilt wheel for Windows)
-  install_fasttext(python_version = python_version,
-                   conda_env_name = conda_env_name,
-                   verbose = verbose,
-                   conda_path = conda_path,
-                   force = TRUE)
+#   # 3. Install FastText (prebuilt wheel for Windows)
+#   install_fasttext(python_version = python_version,
+#                    conda_env_name = conda_env_name,
+#                    verbose = verbose,
+#                    conda_path = conda_path,
+#                    force = TRUE)
+#
+#   # 4. Check if FastText works
+#   py_bin <- reticulate::py_exe()
+#   check_code <- "
+# try:
+#     import fasttext
+#     ok = hasattr(fasttext, 'train_unsupervised')
+#     print('OK' if ok else 'FAIL')
+# except Exception:
+#     print('FAIL')
+# "
+#   tmpfile <- tempfile(fileext = ".py")
+#   writeLines(check_code, tmpfile)
+#   result <- system(sprintf('"%s" "%s"', py_bin, tmpfile), intern = TRUE)
+#   unlink(tmpfile)
+#
+#   fasttext_ok <- any(grepl("^OK$", result))
+#
+#   # 5. Install EasyNMT (+ deps) depending on FastText availability
+#   if (fasttext_ok) {
+#     message("FastText detected. Installing EasyNMT with dependencies...")
+#     cmd <- sprintf(
+#       '"%s" -m pip install easynmt nltk numpy pandas protobuf sentencepiece==0.2.0 torch tqdm transformers langdetect sacremoses',
+#       py_bin
+#     )
+#     system(cmd)
+#   } else {
+#    warning("FastText not detected. Installing EasyNMT without FastText and adding other dependencies...")
 
-  # 4. Check if FastText works
-  py_bin <- reticulate::py_exe()
-  check_code <- "
-try:
-    import fasttext
-    ok = hasattr(fasttext, 'train_unsupervised')
-    print('OK' if ok else 'FAIL')
-except Exception:
-    print('FAIL')
-"
-  tmpfile <- tempfile(fileext = ".py")
-  writeLines(check_code, tmpfile)
-  result <- system(sprintf('"%s" "%s"', py_bin, tmpfile), intern = TRUE)
-  unlink(tmpfile)
-
-  fasttext_ok <- any(grepl("^OK$", result))
-
-  # 5. Install EasyNMT (+ deps) depending on FastText availability
-  if (fasttext_ok) {
-    message("FastText detected. Installing EasyNMT with dependencies...")
-    cmd <- sprintf(
-      '"%s" -m pip install easynmt nltk numpy pandas protobuf sentencepiece==0.2.0 torch tqdm transformers langdetect sacremoses',
-      py_bin
-    )
-    system(cmd)
-  } else {
-    warning("FastText not detected. Installing EasyNMT without FastText and adding other dependencies...")
     cmd1 <- sprintf('"%s" -m pip install easynmt --no-deps', py_bin)
     cmd2 <- sprintf(
-      '"%s" -m pip install nltk numpy protobuf sentencepiece torch tqdm transformers langdetect sacremoses',
+      '"%s" -m pip install nltk numpy pandas protobuf sentencepiece tqdm transformers langdetect sacremoses',
       py_bin
     )
     system(cmd1)
     system(cmd2)
-  }
+#  }
 
   # 6. Install additional dependencies via install_deps()
   install_deps(
