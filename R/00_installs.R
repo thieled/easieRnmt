@@ -750,13 +750,14 @@ initialize_easynmt <- function(python_version = "3.11",
   }
 
   easynmt_ver  <- get_py_version("easynmt")
-  fasttext_ver <- get_py_version("fasttext")
 
-  if (!is.na(fasttext_ver)) {
-    vmessage("fasttext version: ", fasttext_ver)
-  } else {
-    vmessage("fasttext not found in active Python environment.")
-  }
+  # fasttext_ver <- get_py_version("fasttext")
+  #
+  # if (!is.na(fasttext_ver)) {
+  #   vmessage("fasttext version: ", fasttext_ver)
+  # } else {
+  #   vmessage("fasttext not found in active Python environment.")
+  # }
 
   if (!is.na(easynmt_ver)) {
     vmessage("EasyNMT version: ", easynmt_ver)
