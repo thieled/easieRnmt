@@ -296,6 +296,7 @@ get_nvidia_gpu_name <- function() {
   base::trimws(out[1])
 }
 
+
 #' @title Choose PyTorch CUDA wheel tag (conservative)
 #'
 #' @description Internal helper that selects the PyTorch wheel index tag.
@@ -328,6 +329,7 @@ choose_pytorch_cuda_tag <- function(cuda_version, gpu_name = NULL) {
   if (v >= 12.8) return("cu128")
   "cu126"
 }
+
 
 #' @title Construct PyTorch installation URL
 #'
@@ -578,13 +580,13 @@ install_easynmt <- function(
                 conda_path = conda_path,
                 verbose = verbose)
 
-#   # 3. Install FastText (prebuilt wheel for Windows)
-#   install_fasttext(python_version = python_version,
-#                    conda_env_name = conda_env_name,
-#                    verbose = verbose,
-#                    conda_path = conda_path,
-#                    force = TRUE)
-#
+  # 3. Install FastText (prebuilt wheel for Windows)
+  install_fasttext(python_version = python_version,
+                   conda_env_name = conda_env_name,
+                   verbose = verbose,
+                   conda_path = conda_path,
+                   force = TRUE)
+
 #   # 4. Check if FastText works
 #  py_bin <- reticulate::py_exe()
 #   check_code <- "
@@ -606,23 +608,86 @@ install_easynmt <- function(
 #   if (fasttext_ok) {
 #     message("FastText detected. Installing EasyNMT with dependencies...")
 #     cmd <- sprintf(
-#       '"%s" -m pip install easynmt nltk numpy pandas protobuf sentencepiece==0.2.0 torch tqdm transformers langdetect sacremoses',
+#       '"%s" -m pip install easynmt nltk numpy pandas protobuf sentencepiece==0.2.0 tqdm transformers==4.9.0 langdetect sacremoses',
 #       py_bin
 #     )
 #     system(cmd)
 #   } else {
 #    warning("FastText not detected. Installing EasyNMT without FastText and adding other dependencies...")
+#
+#     cmd1 <- sprintf('"%s" -m pip install easynmt --no-deps', py_bin)
+#     cmd2 <- sprintf(
+#       '"%s" -m pip install nltk numpy pandas protobuf sentencepiece tqdm transformers==4.9.0 langdetect sacremoses',
+#       py_bin
+#     )
+#     system(cmd1)
+#     system(cmd2)
+#   }
 
-    py_bin <- reticulate::py_exe()
+  ### More robust attmept:
 
-    cmd1 <- sprintf('"%s" -m pip install easynmt --no-deps', py_bin)
-    cmd2 <- sprintf(
-      '"%s" -m pip install nltk numpy pandas protobuf sentencepiece tqdm transformers langdetect sacremoses',
-      py_bin
+  # 4. Check if FastText works
+  check_code <- "
+try:
+    import fasttext
+    ok = hasattr(fasttext, 'train_unsupervised')
+    print('OK' if ok else 'FAIL')
+except Exception:
+    print('FAIL')
+"
+  tmpfile <- tempfile(fileext = ".py")
+  writeLines(check_code, tmpfile)
+
+  # Use system2() for better cross-platform support
+  result <- system2(
+    reticulate::py_exe(),
+    args = shQuote(tmpfile, type = "cmd"),
+    stdout = TRUE,
+    stderr = FALSE
+  )
+  unlink(tmpfile)
+
+  fasttext_ok <- !is.null(result) && any(grepl("^OK$", trimws(result)))
+
+  # 5. Install EasyNMT (+ deps) depending on FastText availability
+  if (fasttext_ok) {
+    if (verbose) message("FastText detected. Installing EasyNMT with dependencies...")
+
+    reticulate::py_install(
+      packages = c(
+        "easynmt", "nltk", "numpy", "pandas", "protobuf",
+        "sentencepiece==0.2.0", "tqdm", "transformers==4.9.0",
+        "langdetect", "sacremoses"
+      ),
+      envname = conda_env_name,
+      method = "conda",
+      pip = TRUE
     )
-    system(cmd1)
-    system(cmd2)
-#  }
+  } else {
+    if (verbose) warning("FastText not detected. Installing EasyNMT without FastText...")
+
+    # Install easynmt without dependencies
+    reticulate::py_install(
+      packages = "easynmt",
+      envname = conda_env_name,
+      method = "conda",
+      pip = TRUE,
+      pip_options = "--no-deps"
+    )
+
+    # Install remaining dependencies
+    reticulate::py_install(
+      packages = c(
+        "nltk", "numpy", "pandas", "protobuf", "sentencepiece",
+        "tqdm", "transformers==4.9.0", "langdetect", "sacremoses"
+      ),
+      envname = conda_env_name,
+      method = "conda",
+      pip = TRUE
+    )
+  }
+
+  ####
 
   # 6. Install additional dependencies via install_deps()
   install_deps(
