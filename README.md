@@ -74,14 +74,16 @@ res <- easieRnmt::translate(sentences,
                      targ_lang = "en",
                      return_string = T)
 #> Running fastText language detection...
+#> Tokenizing texts after language detection...
+#> Tokenizing texts into sentences and chunks...
 #> Processing language: ar
 #> Processing language: de
 #> Processing language: es
 # Print results
 print(res)
-#> [1] "That's a sentence in Arabic!"                       
-#> [2] "This is a sentence in German. And another sentence."
-#> [3] "This is a sentence in Spanish."
+#> [1] "This is a sentence in German. And another sentence."
+#> [2] "This is a sentence in Spanish."                     
+#> [3] "That's a sentence in Arabic!"
 ```
 
 [^1]: Thanks to [JBGruber](https://github.com/JBGruber), who provided

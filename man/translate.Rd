@@ -28,7 +28,7 @@ translate(
   check_threshold = 0.6,
   return_string = FALSE,
   save_dir = NULL,
-  tokenize_sentences = FALSE,
+  tokenize_sentences = TRUE,
   uv_cache_dir = NULL,
   models_dir = NULL,
   ...
@@ -91,7 +91,7 @@ than this are truncated. Default = 5000.}
 subset as an \code{.rds} file with its language/part name.}
 
 \item{tokenize_sentences}{Logical, if TRUE, split long texts into sentences
-during preprocessing and reassemble them after translation. Default = FALSE.}
+during preprocessing and reassemble them after translation. Default = TRUE.}
 
 \item{uv_cache_dir}{Character (optional). Directory used by uv to install python libraries, passed on to initialize_easynmt.}
 

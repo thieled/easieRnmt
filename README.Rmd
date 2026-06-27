@@ -55,7 +55,6 @@ It supports efficient batch-processing, and takes care that only language-homoge
 
 Finally, it glues all translated sentences back together to the input format, sorts the translations as the input, and returns either a data.table (including the cleaned text and additional information) or the string only. 
 
-
 ```{r example, eval=T}
 
 # Minimal example
