@@ -1,10 +1,10 @@
 Package: easieRnmt
 Title: EasyNMT for R
-Version: 0.0.3.0.1
+Version: 0.0.4
 Authors@R: 
-    person("Daniel", "Thiele", , "daniel.thiele@fu-berlin.de", role = c("aut", "cre"))
-Description: R wrapper around the EasyNMT python library, providing "Easy to use, state-of-the-art Neural Machine Translation for 100+ languages" locally.
-License: CC BY 4.0
+    person("Daniel", "Thiele", , "daniel.thiele@fu-berlin.de", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-0324-4943"))
+Description: The package enables easy-to-use machine translation locally on the user's machine, wrapping the Python 'EasyNMT' library <https://github.com/UKPLab/EasyNMT>. The package takes care of sentence-tokenization, preprocessing, and language detection using 'fastText' from R. Python backend and installation of PyTorch is handled by 'reticulate' and 'uv'. Supports translation between multiple language pairs. 
+License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
@@ -23,5 +23,4 @@ Imports:
     stringr,
     textclean,
     tokenizers
-Suggests: 
-    httr
+Suggests:

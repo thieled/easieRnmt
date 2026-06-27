@@ -104,7 +104,7 @@ clean_text <- function(x,
 
   vmessage <- function(...) if (verbose) message(...)
 
-  # --- Input handling ---
+  #  Input handling 
   if (is.character(x)) {
     dt <- data.table::data.table(doc_idx = seq_along(x), text_orig = x)
   } else if (is.data.frame(x)) {
@@ -122,7 +122,7 @@ clean_text <- function(x,
     stop("x must be a character vector or data.frame")
   }
 
-  # --- Cleaning pipeline ---
+  #  Cleaning pipeline 
   dt[, text_clean := enc2utf8(text_orig)]
   dt[is.na(text_clean), text_clean := ""]
   if (replace_emojis) dt[, text_clean := replace_emoji_with_name(text_clean)]
@@ -142,7 +142,7 @@ clean_text <- function(x,
     dt[, text_clean := stringr::str_squish(text_clean)]
   }
 
-  # --- Sentence + chunk tokenization ---
+  #  Sentence + chunk tokenization 
   if (tokenize_sentences) {
     vmessage("Tokenizing texts into sentences and chunks...")
 
@@ -177,31 +177,7 @@ clean_text <- function(x,
     )
 
 
-    # tokenized_dt <- data.table::rbindlist(
-    #   lapply(seq_along(tokenized_list), function(i) {
-    #     sents <- unlist(tokenized_list[[i]])
-    #
-    #     # further split long sentences
-    #     sents_split <- unlist(lapply(seq_along(sents), function(j) {
-    #       if (tokenizers::count_words(sents[j]) > max_words) {
-    #         tokenizers::chunk_text(sents[j],
-    #                                doc_id = paste0(i, "_", j),
-    #                                chunk_size = max_words)
-    #       } else {
-    #         sents[j]
-    #       }
-    #     }))
-    #
-    #     data.table::data.table(
-    #       doc_idx = dt$doc_idx[i],
-    #       sen_idx = seq_along(sents_split),
-    #       text_clean = sents_split
-    #     )
-    #   }),
-    #   use.names = TRUE, fill = TRUE
-    # )
-
-    # --- safer join of metadata (no recycling issues) ---
+    #  safer join of metadata (no recycling issues) 
     meta_cols <- setdiff(names(dt), "text_clean")
     tokenized_dt <- dt[, ..meta_cols][tokenized_dt, on = "doc_idx"]
 
@@ -210,16 +186,16 @@ clean_text <- function(x,
     dt[, sen_idx := 1L]
   }
 
-  # --- Create sen_id ---
+  #  Create sen_id 
   dt[, sen_id := paste0(doc_idx, "_", sen_idx)]
 
-  # --- Column order ---
+  #  Column order 
   cols_order <- c("sen_id", "doc_idx", "sen_idx", "id", "text_orig", "text_clean", "lang_guess")
   cols_exist <- intersect(cols_order, names(dt))
   dt <- dt[, ..cols_exist]
   data.table::setcolorder(dt, cols_exist)
 
-  # --- Sorting ---
+  #  Sorting 
   data.table::setorder(dt, doc_idx, sen_idx)
 
   if (return_string) {
