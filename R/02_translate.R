@@ -109,7 +109,13 @@ translate <- function(
     )
 
    # Convert pandas DataFrame using to_dict(orient='records')
-    res_list <- reticulate::py_to_r(res$to_dict(orient = "records"))
+    res_list <- if (inherits(res, "data.frame")) {
+      # reticulate already auto-converted to R data.frame
+      lapply(seq_len(nrow(res)), function(i) as.list(res[i, ]))
+    } else {
+      # still a Python object — call to_dict the normal way
+      reticulate::py_to_r(res$to_dict(orient = "records"))
+    }
     res <- suppressWarnings(data.table::rbindlist(res_list, fill = TRUE))
 
     # merge back with original data
