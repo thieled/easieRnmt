@@ -84,6 +84,6 @@ print(res)
 #> [3] "This is a sentence in Spanish."
 ```
 
-[^1]: Thanks to [JBGruber](https://github.com/JBGruber), who suggested
+[^1]: Thanks to [JBGruber](https://github.com/JBGruber), who provided
     this python backend setup for my other package
     [sentiner](https://github.com/thieled/sentiner).

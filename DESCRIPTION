@@ -3,7 +3,7 @@ Title: EasyNMT for R
 Version: 0.0.4
 Authors@R: 
     person("Daniel", "Thiele", , "daniel.thiele@fu-berlin.de", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-0324-4943"))
-Description: The package enables easy-to-use machine translation locally on the user's machine, wrapping the Python 'EasyNMT' library <https://github.com/UKPLab/EasyNMT>. The package takes care of sentence-tokenization, preprocessing, and language detection using 'fastText' from R. Python backend and installation of PyTorch is handled by 'reticulate' and 'uv'. Supports translation between multiple language pairs. 
+Description: R wrapper around the Python library 'EasyNMT' <https://github.com/UKPLab/EasyNMT>, enabling easy-to-use, local, reproducible machine translation. The package takes care of tokenization, pre-processing, and language detection using 'fastText' from R. Python backend and installation of PyTorch is handled by 'reticulate' and 'uv'. Supports translation between multiple language pairs. 
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

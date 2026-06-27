@@ -35,7 +35,7 @@ From version 0.0.3 onwards, the package's python backend that runs the `'EasyNMT
 version - supporting CUDA (Nvidia GPU) integration if this is available on your machine.
 It also includes a workaround of the `'fasttext'` dependency conflict which is occuring on Windows machines.
 
-[^1]: Thanks to [JBGruber](https://github.com/JBGruber), who suggested this python backend setup for my other package [sentiner](https://github.com/thieled/sentiner). 
+[^1]: Thanks to [JBGruber](https://github.com/JBGruber), who provided this python backend setup for my other package [sentiner](https://github.com/thieled/sentiner). 
 
 ```{r install, eval=F}
 easieRnmt::initialize_easynmt()
