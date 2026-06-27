@@ -21,7 +21,7 @@
 #' @param save_dir Optional character path. If provided, saves each processed
 #'   subset as an `.rds` file with its language/part name.
 #' @param tokenize_sentences Logical, if TRUE, split long texts into sentences
-#'   during preprocessing and reassemble them after translation. Default = FALSE.
+#'   during preprocessing and reassemble them after translation. Default = TRUE.
 #' @param uv_cache_dir Character (optional). Directory used by uv to install python libraries, passed on to initialize_easynmt.
 #' @param models_dir Character (optional).  Directory used to cache huggingface models, passed on to initialize_easynmt.
 #' @param ... Additional parameters passed on to `clean_text()` during preprocessing.
@@ -52,7 +52,7 @@ translate <- function(
     check_threshold = 0.6,
     return_string = FALSE,
     save_dir = NULL,
-    tokenize_sentences = FALSE,
+    tokenize_sentences = TRUE,
     uv_cache_dir = NULL,
     models_dir = NULL,
     ...
@@ -180,6 +180,9 @@ translate <- function(
 
     out <- stitched[]
   }
+
+  # Ensure sorting by input
+  out <- out[order(as.numeric(doc_idx))]
 
   # --- Step 5: Column order ---
   desired_cols <- c(
