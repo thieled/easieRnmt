@@ -28,3 +28,5 @@ utils::globalVariables(c(".I",
                          "sen_idx"
                          )
 )
+
+.env <- new.env()

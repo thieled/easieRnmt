@@ -23,13 +23,15 @@ You can install the development version of easieRnmt from
 pak::pak("thieled/easieRnmt")
 ```
 
-The package runs EasyNMT from a conda environment ‘r-easynmt’. This
-function will install and set up everything for you. It also
-automatically installs the correct pytorch version - supporting CUDA
-(Nvidia GPU) integration if this is available on your machine:
+From version 0.0.3 onwards, the package’s python backend that runs the
+`EasyNMT` library is managed by `uv` via `reticulate`. This function
+initializes this backend, automatically installs the correct pytorch
+version - supporting CUDA (Nvidia GPU) integration if this is available
+on your machine. It also includes a workaround of the `fasttext`
+dependency conflict which is occuring on Windows machines.
 
 ``` r
-easieRnmt::install_easynmt()
+easieRnmt::initialize_easynmt()
 ```
 
 Note that the package requires a C++ compiler (e.g. g++). If you are a
