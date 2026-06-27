@@ -22,6 +22,8 @@
 #'   subset as an `.rds` file with its language/part name.
 #' @param tokenize_sentences Logical, if TRUE, split long texts into sentences
 #'   during preprocessing and reassemble them after translation. Default = FALSE.
+#' @param uv_cache_dir Character (optional). Directory used by uv to install python libraries, passed on to initialize_easynmt.
+#' @param models_dir Character (optional).  Directory used to cache huggingface models, passed on to initialize_easynmt.
 #' @param ... Additional parameters passed on to `clean_text()` during preprocessing.
 #'
 #' @return A data.table with original data plus translation results merged in.
@@ -51,14 +53,14 @@ translate <- function(
     return_string = FALSE,
     save_dir = NULL,
     tokenize_sentences = FALSE,
+    uv_cache_dir = NULL,
+    models_dir = NULL,
     ...
 ) {
   vmessage <- function(...) if (verbose) message(...)
 
   # --- sanity check: environment initialized? ---
-  if (is.null(options("easynmt_initialized")$easynmt_initialized)) {
-    stop("EasyNMT environment not initialized. Please run initialize_easynmt() first.")
-  }
+  initialize_easynmt(uv_cache_dir = uv_cache_dir, models_dir = models_dir)
 
   # --- Step 1: check if x is already preprocessed ---
   if (is.list(x) && all(c("sen_id", "lang", "text_clean") %in% names(x[[1]]))) {

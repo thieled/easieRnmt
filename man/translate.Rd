@@ -29,6 +29,8 @@ translate(
   return_string = FALSE,
   save_dir = NULL,
   tokenize_sentences = FALSE,
+  uv_cache_dir = NULL,
+  models_dir = NULL,
   ...
 )
 }
@@ -90,6 +92,10 @@ subset as an \code{.rds} file with its language/part name.}
 
 \item{tokenize_sentences}{Logical, if TRUE, split long texts into sentences
 during preprocessing and reassemble them after translation. Default = FALSE.}
+
+\item{uv_cache_dir}{Character (optional). Directory used by uv to install python libraries, passed on to initialize_easynmt.}
+
+\item{models_dir}{Character (optional).  Directory used to cache huggingface models, passed on to initialize_easynmt.}
 
 \item{...}{Additional parameters passed on to \code{clean_text()} during preprocessing.}
 }
